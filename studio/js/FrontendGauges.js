@@ -14,8 +14,8 @@
  *   - 未识别 tag（Canvas 等）的子元素会跳过并提示。
  */
 
-import { makeUid } from './runtime/spec.js?v=20';
-import { specStore } from './SpecStore.js?v=20';
+import { makeUid } from './runtime/spec.js';
+import { specStore } from './SpecStore.js';
 
 // 前端 Leafer tag → studio 图层 type；Ellipse 需按是否有角度参数分流 arc/ellipse
 const TAG_TYPE = { Rect: 'rect', Text: 'text', Line: 'line', Image: 'image', Box: 'group', Path: 'path', Polygon: 'polygon' };

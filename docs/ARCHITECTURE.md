@@ -62,9 +62,12 @@ A page boots in this sequence, and each step depends on the previous one:
 
 Two consequences to remember while editing:
 
-- Importing the same module under two different `?v=` cache-buster strings gives
-  you **two independent instances** (two registries, two stores). Keep the string
-  consistent within a page.
+- This project deliberately ships **no `?v=` cache-buster strings** on ES-module
+  imports or asset URLs. Every import uses the bare relative path (`./Foo.js`),
+  which keeps each module to a single URL and therefore a single instance in the
+  browser. Adding a `?v=` back — even on one file — is how you end up with two
+  registries / two stores; if you ever must, bump them uniformly across the whole
+  tree.
 - Anything a module needs from a classic script must be read lazily (inside a
   function), because at *module evaluation* time the global may not exist yet —
   this is why `MapBridge` re-checks `AMap` before use.

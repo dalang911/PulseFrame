@@ -8,7 +8,7 @@
  * 唯一的外部依赖：SVG 图标的体积上限与字节算法复用 runtime/spec.js，避免两处规则飘移。
  */
 
-import { SVG_MAX_BYTES, svgByteLength } from '../runtime/spec.js?v=20';
+import { SVG_MAX_BYTES, svgByteLength } from '../runtime/spec.js';
 
 const TYPES = ['rect', 'ellipse', 'arc', 'line', 'text', 'svg', 'image', 'group', 'path', 'polygon'];
 const MODES = ['text', 'size', 'angle', 'color', 'opacity', 'visible'];

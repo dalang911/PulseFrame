@@ -6,8 +6,8 @@
  * 与 PropsPanel 共用"选中即刷新"的事件模型；绑定编辑为离散操作（change 提交后整块重渲染）。
  */
 
-import { specStore } from './SpecStore.js?v=20';
-import { fieldsByGroup } from './fieldCatalog.js?v=20';
+import { specStore } from './SpecStore.js';
+import { fieldsByGroup } from './fieldCatalog.js';
 
 // 每个 type 的可绑定属性 → 允许的 mode 列表（'none' 表示解除绑定）
 // 判据：属性在 PropsPanel 可编辑 + bindingEngine 各 mode 天然支持任意数字属性（size/angle 用 binding.prop 定位）

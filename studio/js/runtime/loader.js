@@ -8,10 +8,10 @@
  * 设计器与主编辑器共用同一份注册来源，保证所见即所得。
  */
 
-import { registry } from '../lib/registry.js?v=20';
-import { eventBus } from '../lib/EventBus.js?v=20';
-import { apiBase } from '../lib/appConfig.js?v=20';
-import { registerVisualComponent } from './visualFactory.js?v=20';
+import { registry } from '../lib/registry.js';
+import { eventBus } from '../lib/EventBus.js';
+import { apiBase } from '../lib/appConfig.js';
+import { registerVisualComponent } from './visualFactory.js';
 
 export const LOCAL_PREFIX = 'studio_comp_';
 export const REMOTE_EVENT = 'custom:components-loaded';

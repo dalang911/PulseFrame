@@ -28,10 +28,13 @@ Browsers only run WebCodecs in a secure context, so serve the **production** sit
 over HTTPS. Local `http://localhost` is treated as secure and works for
 development.
 
-Caching: modules are requested with a `?v=` cache-buster on some pages. Keep one
-value per module within a page — two different strings create two instances of the
-same module (two registries, two stores). After an upgrade, change the `?v=` value
-or purge the CDN.
+Caching: this project ships **no `?v=` cache-buster** on ES-module imports or
+asset URLs — every module is fetched by its bare relative path, which is what
+keeps each singleton to exactly one instance. After a deploy, refresh the edge
+from your CDN (on Cloudflare: **Caching → Purge Configuration → Purge
+Everything**, or hit the Purge API from CI). If you ever do re-introduce `?v=`,
+bump it **uniformly across the whole tree** — a partial bump splits the module
+graph into two registries / two stores and causes silent playback bugs.
 
 ## 2. Configuration: `site.config.js`
 
@@ -159,8 +162,8 @@ See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) §2 for the exact list.
 - [ ] `apiBase()` resolves to the intended URL (open the console: the shop logs
       its request; the response should be JSON)
 - [ ] HTTPS + HSTS at the edge
-- [ ] every `?v=` cache-buster is stable within a page and was bumped after an
-      upgrade
+- [ ] CDN edge purged after every deploy (no `?v=` in this project, so a stale
+      module will keep being served until you purge)
 - [ ] *Shared* panel loads the store list, or you have hidden the panel
 - [ ] the map components render, or you have swapped the tile provider
       (OSM-HOT / CARTO / Esri / AMap) to one whose terms suit your use

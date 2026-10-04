@@ -6,9 +6,9 @@
  * 文本框只在失焦提交时写入，且必须过 normalizeSvg 校验（含 10 KB 上限）才落库。
  */
 
-import { specStore } from './SpecStore.js?v=20';
-import { studioCanvas } from './StudioCanvas.js?v=20';
-import { normalizeSvg, svgIconBox, svgByteLength, SVG_MAX_BYTES } from './runtime/spec.js?v=20';
+import { specStore } from './SpecStore.js';
+import { studioCanvas } from './StudioCanvas.js';
+import { normalizeSvg, svgIconBox, svgByteLength, SVG_MAX_BYTES } from './runtime/spec.js';
 
 const ICONFONT_URL = 'https://www.iconfont.cn/collections';
 

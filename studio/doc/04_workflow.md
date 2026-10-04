@@ -14,18 +14,7 @@ API 基址由 `appConfig.apiBase()` 解析，优先级：
 `window.PULSEFRAME_CONFIG.apiBase` → `<meta name="pulseframe:api-base">` → `apiBaseByHost[hostname]` → 由当前 URL 推导（`server/` 与 app 目录同级）。
 所以换域名部署时端点会自动跟着变，一般无需硬编码。
 
-> **改完前端怎么生效（缓存与 `?v=`）**：静态 JS 带 `Cache-Control: max-age=43200`（12 小时），`index.html` 只缓 2 分钟。
-> 规矩：**`studio/js/**` 内部的所有 import 边必须带同一个版本 token**（当前 `?v=18`），改任意内部文件就把 token 统一 +1：
->
-> ```bash
-> cd studio && grep -rl "?v=18" js index.html | xargs sed -i 's/?v=18/?v=19/g'
-> # js 内部边与 index.html 的入口/CSS 一起扫到，改完用 grep -rn "?v=" js index.html 确认只剩新 token
-> ```
->
-> 为什么不能“只给改过的文件加版本号”：没带版本号的模块（曾经的 `SpecStore.js`、`StudioPreview.js`、`FieldDemo.js` 等）URL 永远不变，浏览器/CDN 一旦回了旧副本，**旧副本里的 import 串也是旧的**，于是同一个模块被两个不同 URL 各加载一份——`studioCanvas`/`specStore` 变成两套单例，被 `init()` 的和面板/播放引用的不是同一个。故障是静默的：典型表现就是“点播放只动帧号不动画面”。
-> 现在 `StudioCanvas`/`StudioPreview`/`SpecStore` 末尾各有一段混版自检（第二个实例注册时置 `window.__spDup`），命中后 `StudioApp` 会在顶栏下方挂一条红色横幅让用户强刷，不再让人对着“点了没反应”猜。
->
-> **例外**：跳出 `studio/js/` 进入共享前端树（`../../js/components/…`、`../../../js/core/appConfig.js`）的边**不带** studio 的 token，那边有自己的版本约定；给它们乱加会让前端 registry 裂成两份，仪表盘组件直接从面板消失。
+> **改完前端怎么生效（缓存）**：本项目的 `studio/js/**` 与所有 HTML 资产引用**一律不带 `?v=`**——相对路径直连模块 URL，同一个模块就只有一份实例，不会因版本号不一致触发双 `specStore` / 双 `studioCanvas`。静态资源由 CDN（如 Cloudflare）12 小时缓存；**每次部署后去 CDN 手动 Purge Everything**（或在 CI 调 Purge API），旧副本即被刷新。历史曾出现过半量升版导致的静默播放失效，现 `StudioCanvas` / `StudioPreview` / `SpecStore` 末尾各自保留一段“第二个实例注册时置 `window.__spDup`”的自检作安全网——在当前无 `?v=` 的方案下它不该命中，命中即说明有人在某个 import 边上加回了版本号。
 
 ---
 

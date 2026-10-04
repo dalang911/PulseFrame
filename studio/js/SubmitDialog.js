@@ -9,10 +9,10 @@
  * 且发布后任何人可取用与二创。没勾选时提交按钮置灰，不想公开的用户改走 Save Local / Export JSON。
  */
 
-import { specStore } from './SpecStore.js?v=20';
-import { apiBase } from './lib/appConfig.js?v=20';
-import { validateSpec } from './lib/validateSpec.js?v=20';
-import { findIdConflict, nextCandidateId } from './lib/idGuard.js?v=20';
+import { specStore } from './SpecStore.js';
+import { apiBase } from './lib/appConfig.js';
+import { validateSpec } from './lib/validateSpec.js';
+import { findIdConflict, nextCandidateId } from './lib/idGuard.js';
 
 // 组件分类对齐主编辑器 WidgetPicker 的分类集合
 const CATEGORIES = [

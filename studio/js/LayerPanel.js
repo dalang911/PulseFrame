@@ -8,7 +8,7 @@
  * 选中双向同步：点行 → specStore.setSelected；画布点选 → specStore select 事件 → 高亮行。
  */
 
-import { specStore } from './SpecStore.js?v=20';
+import { specStore } from './SpecStore.js';
 
 const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;');
 

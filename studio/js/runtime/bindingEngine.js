@@ -6,8 +6,8 @@
  * 新增可视化能力（如 points 折线）只需在 MODES 里注册一个 mode，无需改动工厂。
  */
 
-import { unitConfig } from '../lib/UnitConfig.js?v=20';
-import { speedToPace } from '../lib/format.js?v=20';
+import { unitConfig } from '../lib/UnitConfig.js';
+import { speedToPace } from '../lib/format.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 

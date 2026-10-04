@@ -6,25 +6,25 @@
  * 以及键盘快捷键（Ctrl+Z / Ctrl+Shift+Z / Ctrl+S）。
  */
 
-import { specStore } from './SpecStore.js?v=20';
-import { studioCanvas } from './StudioCanvas.js?v=20';
-import { elementPalette } from './ElementPalette.js?v=20';
-import { propsPanel } from './PropsPanel.js?v=20';
-import { multiSelectPanel } from './MultiSelectPanel.js?v=20';
-import { layerPanel } from './LayerPanel.js?v=20';
-import { bindingPanel } from './BindingPanel.js?v=20';
-import { studioPreview } from './StudioPreview.js?v=20';
-import { submitDialog } from './SubmitDialog.js?v=20';
-import { handbookDialog } from './HandbookDialog.js?v=20';
-import { registry } from './lib/registry.js?v=20';
-import { validateSpec } from './lib/validateSpec.js?v=20';
-import { setReservedIds, suggestUniqueId, findIdConflict } from './lib/idGuard.js?v=20';
-import { themeManager, THEME_EVENT } from './ThemeManager.js?v=20';
-import { loadFrontendDefs } from './FrontendGauges.js?v=20';
-import { registerVisualComponent } from './runtime/visualFactory.js?v=20';
-import { loadCustomComponents, LOCAL_PREFIX } from './runtime/loader.js?v=20';
-import { apiBase } from './lib/appConfig.js?v=20';
-import { DEMO_RQ } from './demoData.js?v=20';
+import { specStore } from './SpecStore.js';
+import { studioCanvas } from './StudioCanvas.js';
+import { elementPalette } from './ElementPalette.js';
+import { propsPanel } from './PropsPanel.js';
+import { multiSelectPanel } from './MultiSelectPanel.js';
+import { layerPanel } from './LayerPanel.js';
+import { bindingPanel } from './BindingPanel.js';
+import { studioPreview } from './StudioPreview.js';
+import { submitDialog } from './SubmitDialog.js';
+import { handbookDialog } from './HandbookDialog.js';
+import { registry } from './lib/registry.js';
+import { validateSpec } from './lib/validateSpec.js';
+import { setReservedIds, suggestUniqueId, findIdConflict } from './lib/idGuard.js';
+import { themeManager, THEME_EVENT } from './ThemeManager.js';
+import { loadFrontendDefs } from './FrontendGauges.js';
+import { registerVisualComponent } from './runtime/visualFactory.js';
+import { loadCustomComponents, LOCAL_PREFIX } from './runtime/loader.js';
+import { apiBase } from './lib/appConfig.js';
+import { DEMO_RQ } from './demoData.js';
 
 const $ = (sel) => document.querySelector(sel);
 

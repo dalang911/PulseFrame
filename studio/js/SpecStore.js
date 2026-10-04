@@ -6,8 +6,8 @@
  *   用户操作 → SpecStore 改 spec + emit → StudioCanvas/面板重渲染。
  */
 
-import { createEmptySpec, makeLayer } from './runtime/spec.js?v=20';
-import { LOCAL_PREFIX } from './runtime/loader.js?v=20';
+import { createEmptySpec, makeLayer } from './runtime/spec.js';
+import { LOCAL_PREFIX } from './runtime/loader.js';
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 

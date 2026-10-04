@@ -1,5 +1,5 @@
 # PulseFrame 脉搏帧帧
-
+本项目99%由AI编写
 > **“Your effort, framed.”**
 > Turn a FIT / GPX / TCX activity file into a per-second dashboard overlay for your workout video — entirely in the browser, no client app, no upload to a vendor.
 

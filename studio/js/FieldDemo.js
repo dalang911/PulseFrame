@@ -12,10 +12,10 @@
  * 生成的都是普通图层（含绑定），可继续编辑/删除（Ctrl+Z 一步撤销）。
  */
 
-import { specStore } from './SpecStore.js?v=20';
-import { studioCanvas } from './StudioCanvas.js?v=20';
-import { makeLayer } from './runtime/spec.js?v=20';
-import { FIELDS } from './fieldCatalog.js?v=20';
+import { specStore } from './SpecStore.js';
+import { studioCanvas } from './StudioCanvas.js';
+import { makeLayer } from './runtime/spec.js';
+import { FIELDS } from './fieldCatalog.js';
 
 // 分组配色（与画布深色底 #23232e 对比清晰）
 const GROUP_COLOR = { value: '#6fd3ff', derived: '#ffd166', extreme: '#ff9fb2' };

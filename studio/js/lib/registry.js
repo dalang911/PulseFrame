@@ -3,7 +3,7 @@
  * 集中管理所有组件定义，提供注册/获取/列举功能
  */
 
-import { eventBus, Events } from './EventBus.js?v=20';
+import { eventBus, Events } from './EventBus.js';
 
 class ComponentRegistry {
     constructor() {

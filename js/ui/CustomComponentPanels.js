@@ -15,7 +15,7 @@ import { store } from '../core/Store.js';
 import { canvasManager } from '../core/CanvasManager.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { safeThumb } from '../core/appConfig.js';
-import { loadLocalComponents, LOCAL_PREFIX, REMOTE_EVENT, fetchRemoteRows, ensureRowRegistered, REMOTE_PAGE } from '../components/visual/loader.js?v=7';
+import { loadLocalComponents, LOCAL_PREFIX, REMOTE_EVENT, fetchRemoteRows, ensureRowRegistered, REMOTE_PAGE } from '../components/visual/loader.js';
 
 const CAT_LABELS = { running: 'Running', cycling: 'Cycling', swimming: 'Swimming', time: 'Time', distance: 'Distance', map: 'Map', chart: 'Chart', attr: 'Attribute', text: 'Text', theme: 'Theme' };
 

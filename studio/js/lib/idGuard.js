@@ -11,8 +11,8 @@
  * （它们注册在前端自己的 registry 实例上），命中后 loader 会直接跳过，组件根本不出现。
  */
 
-import { registry } from './registry.js?v=20';
-import { LOCAL_PREFIX } from '../runtime/loader.js?v=20';
+import { registry } from './registry.js';
+import { LOCAL_PREFIX } from '../runtime/loader.js';
 
 let _reserved = new Set();
 

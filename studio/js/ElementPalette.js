@@ -8,10 +8,10 @@
  * 低门槛优先：块即"图层语法糖"，插入后仍可逐项改属性/绑定/层叠。
  */
 
-import { specStore } from './SpecStore.js?v=20';
-import { makeLayer } from './runtime/spec.js?v=20';
-import { fieldDemo } from './FieldDemo.js?v=20';
-import { loadFrontendDefs, importDef } from './FrontendGauges.js?v=20';
+import { specStore } from './SpecStore.js';
+import { makeLayer } from './runtime/spec.js';
+import { fieldDemo } from './FieldDemo.js';
+import { loadFrontendDefs, importDef } from './FrontendGauges.js';
 
 const BASIC = [
     { type: 'rect', label: 'Rect' },

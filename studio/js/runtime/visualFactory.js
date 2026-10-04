@@ -8,9 +8,9 @@
  * 这样设计器保存/发布的组件即可被主编辑器 addComponentToCanvas / updater / 视频导出复用。
  */
 
-import { registry } from '../lib/registry.js?v=20';
-import { layerToElement, flattenLayers, collectBindings } from './spec.js?v=20';
-import { applyLayerBindings } from './bindingEngine.js?v=20';
+import { registry } from '../lib/registry.js';
+import { layerToElement, flattenLayers, collectBindings } from './spec.js';
+import { applyLayerBindings } from './bindingEngine.js';
 
 /** 依据 spec 生成右侧属性面板用的 settings（MVP：标题 + 可选作者声明的可编辑项） */
 function buildSettings(spec) {

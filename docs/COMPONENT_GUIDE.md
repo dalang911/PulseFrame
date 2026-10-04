@@ -255,4 +255,5 @@ express: custom math, chart geometry, animation states, map projections.
       memory canvas, not just the editor.
 - [ ] Works with a file lacking heart rate / cadence / GPS (`samples/demo-run.gpx`
       has all three; try a stripped copy).
-- [ ] No store URL, no API key, no `?v=` inconsistency introduced.
+- [ ] No store URL, no API key, no `?v=` cache-buster introduced (the project
+      standard is: bare relative imports, rely on the CDN to purge).

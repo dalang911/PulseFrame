@@ -6,7 +6,7 @@
  * 播放到最后一帧自动停止；点 ⟲ 或退出预览时 studioCanvas.exitPreview() 恢复设计值。
  */
 
-import { studioCanvas } from './StudioCanvas.js?v=20';
+import { studioCanvas } from './StudioCanvas.js';
 
 const PLAY_INTERVAL = 60; // ms/帧
 

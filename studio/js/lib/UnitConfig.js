@@ -10,7 +10,7 @@
  *   - 变更时通过 eventBus 广播 Events.UNIT_CONFIG_CHANGED，驱动画布刷新
  */
 
-import { eventBus, Events } from './EventBus.js?v=20';
+import { eventBus, Events } from './EventBus.js';
 
 const STORAGE_KEY = 'newsports_unit_config';
 

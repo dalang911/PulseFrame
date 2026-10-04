@@ -9,8 +9,8 @@
  * 所有写回通过 studioCanvas.runBatch 完成（保留多选、一次提交进 undo 历史）。
  */
 
-import { specStore } from './SpecStore.js?v=20';
-import { studioCanvas } from './StudioCanvas.js?v=20';
+import { specStore } from './SpecStore.js';
+import { studioCanvas } from './StudioCanvas.js';
 
 const esc = (s) => String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
 

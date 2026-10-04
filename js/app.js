@@ -8,7 +8,7 @@ import { store } from './core/Store.js';
 import { canvasManager } from './core/CanvasManager.js';
 import { DEFAULT_CANVAS, PREVIEW_SIZE } from './core/constants.js';
 import { dataPipeline } from './data/DataPipeline.js';
-import { localComponents, sharedComponents } from './ui/CustomComponentPanels.js?v=7';
+import { localComponents, sharedComponents } from './ui/CustomComponentPanels.js';
 import { widgetPicker } from './ui/WidgetPicker.js';
 import { settingsPanel } from './ui/SettingsPanel.js';
 import { initBackgroundLayer } from './components/factory.js';
@@ -22,7 +22,7 @@ import { initGlobalFont } from './core/GlobalFont.js';
 // 导入组件定义（触发注册到 registry）
 import './components/definitions/index.js';
 // 自定义（可视化）组件：本地同步注册 + 远端异步（审核通过的公共组件）
-import { loadCustomComponents, REMOTE_EVENT } from './components/visual/loader.js?v=7';
+import { loadCustomComponents, REMOTE_EVENT } from './components/visual/loader.js';
 
 // 内置定义注册完毕后，立即加载本地自定义组件（早于 widgetPicker 渲染）
 loadCustomComponents();

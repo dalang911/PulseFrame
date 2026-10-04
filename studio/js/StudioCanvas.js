@@ -6,10 +6,10 @@
  * 提供层叠重排后的整体重渲染，以及基于真实数据的绑定预览（逐帧）。
  */
 
-import { specStore } from './SpecStore.js?v=20';
-import { LAYER_TAG, flattenLayers, normalizeArcProps, resolveSvgProps } from './runtime/spec.js?v=20';
-import { applyLayerBindings } from './runtime/bindingEngine.js?v=20';
-import { THEME_EVENT } from './ThemeManager.js?v=20';
+import { specStore } from './SpecStore.js';
+import { LAYER_TAG, flattenLayers, normalizeArcProps, resolveSvgProps } from './runtime/spec.js';
+import { applyLayerBindings } from './runtime/bindingEngine.js';
+import { THEME_EVENT } from './ThemeManager.js';
 
 const FIT_PAD = 0.82;
 
