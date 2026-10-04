@@ -1,0 +1,42 @@
+# ---------------------------------------------------------------------------
+# Deployment-local files. They sit next to the app but are not part of it:
+# the store is a separate deployment (its layout and runtime files belong to
+# that deployment, not to this repo), and site.config.js holds the AMap key
+# plus the API address of a concrete installation.
+# ---------------------------------------------------------------------------
+server/
+site.config.js
+
+# ---------------------------------------------------------------------------
+# User / runtime data — never commit real activity files or personal uploads.
+# These patterns are anchored: js/data/ holds source code and must stay.
+# ---------------------------------------------------------------------------
+/data/
+/studio/data/
+uploads/
+*.gpx
+!samples/*.gpx
+*.tcx
+*.fit
+*.log
+logs/
+temp/
+
+# ---------------------------------------------------------------------------
+# OS / editor noise
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+*.bak
+*.副本*
+.idea/
+.vscode/
+
+# ---------------------------------------------------------------------------
+# Node is only used for optional tooling; nothing here needs it to run
+# ---------------------------------------------------------------------------
+node_modules/
+npm-debug.log*

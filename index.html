@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>PulseFrame — Sports Data Overlay Studio</title>
+    <meta name="description" content="PulseFrame（脉搏帧帧）把上传的 FIT / GPX / TCX 运动数据，生成为可叠加到视频上的仪表盘画面：1 秒 1 帧，全程在浏览器内完成。No client, in-browser, one frame per second, open components.">
+    <meta property="og:title" content="PulseFrame 脉搏帧帧 — Your effort, framed.">
+    <meta property="og:description" content="运动数据叠加视频工坊：上传运动文件，逐帧生成好看的仪表盘。无客户端、浏览器内完成、组件开放共享。">
+    <meta property="og:site_name" content="PulseFrame 脉搏帧帧">
+
+    <!-- 第三方 CSS -->
+    <link rel="stylesheet" href="./css/layui.css">
+    <link rel="stylesheet" href="./css/maptalks.css">
+    <link rel="stylesheet" href="./css/app.css?v=7">
+    <link href="https://gstatic.qaq.qa/css2?family=Sofadi+One&display=swap" rel="stylesheet">
+
+    <!-- 第三方 JS（非模块） -->
+    <script src="./lib/jquery-3.6.0.min.js"></script>
+    <script src="./lib/layui.js"></script>
+    <script src="./lib/maptalks.min.js"></script>
+
+    <!-- 部署配置（本地文件，不进仓库）：apiBase / amapKey 等，写法见 site.config.example.js -->
+    <script src="./site.config.js" onerror="console.info('[PulseFrame] site.config.js 未放置，使用内置默认值')"></script>
+
+    <!-- 高德地图 JS API（可选）：只有配置了 amapKey 才加载；maptalks 系列图层不需要它 -->
+    <script>
+    (function () {
+        var cfg = window.PULSEFRAME_CONFIG = window.PULSEFRAME_CONFIG || {};
+        if (cfg.amapKey) {
+            document.write('<script src="https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(cfg.amapKey) + '"><\/script>');
+        } else {
+            console.info('[PulseFrame] 未配置 amapKey：高德图层不可用（在 site.config.js 里设置 PULSEFRAME_CONFIG.amapKey）');
+        }
+    })();
+    </script>
+
+    <!-- Leafer Editor 2.2.11（含 leafer-ui + 编辑器插件） -->
+    <script src="https://unpkg.com/leafer-editor@2.2.11/dist/web.min.js"></script>
+
+    <!-- 文件解析器（全局脚本，注册到 window） -->
+    <script src="./js/parsers/GPXParser.js"></script>
+    <script src="./js/parsers/TCXParser.js"></script>
+    <script src="./js/parsers/FitParser.js"></script>
+</head>
+
+<body>
+    <!-- ===== 顶部导航 ===== -->
+    <div class="layui-nav">
+        <li class="layui-nav-item nav-brand" style="margin-right: 30px; font-size: 22px;" title="PulseFrame · Sports Data Overlay Studio · No client · In-browser · One frame per second · Open component platform">
+            PulseFrame
+        </li>
+        <li class="layui-nav-item nav-brand" style="margin-right: 30px; font-size: 20px;" title="Slogan">“Your effort, framed.” </li>
+        <li class="layui-nav-item nav-brand" style="margin-right: 30px; font-size: 16px;" title="">
+            v2.0 · Updated: Native / Local / Shared three panels; progress bar scales with container;
+        </li>
+
+        <div class="ws-header-menu">
+            <li class="layui-nav-item" style="position: absolute; right: 240px; top: 0;">
+                <button class="layui-btn layui-btn-xs layui-btn-normal" id="generateVideoBtn">Generate Video</button>
+            </li>
+            <li class="layui-nav-item" style="position: absolute; right: 100px; top: 0;">
+                <a href="./studio/" target="_blank" title="PulseFrame Studio — build reusable dashboard components">
+                    <button class="layui-btn layui-btn-xs layui-btn-warm">Studio</button>
+                </a>
+            </li>
+            <li class="layui-nav-item" style="position: absolute; right: 50px; top: 0; color: #000; text-align: center;">
+                <a href="https://www.bilibili.com/video/BV1m9fEYRE6u/" target="_blank">
+                    <i class="layui-icon layui-icon-read" style="font-size: 18px; color: #000;"></i>
+                </a>
+            </li>
+            <li class="layui-nav-item" style="position: absolute; right: 10px; top: 0; color: #000; text-align: center;">
+                <a href="https://github.com/dalang911/Web-Sport-Data-Overlay" target="_blank">
+                    <i class="layui-icon layui-icon-github" style="font-size: 18px; color: #000;"></i>
+                </a>
+            </li>
+        </div>
+    </div>
+
+    <!-- ===== 三栏主体 ===== -->
+    <div class="layui-container">
+        <div class="layui-row">
+
+            <!-- 左侧列：文件上传 + 信息 + 组件选择 + 模板商店 -->
+            <div class="column column1">
+                <!-- 文件上传 -->
+                <input type="file" id="fileInput" class="layui-btn" style="padding: 1px;"
+                    accept=".json,.gpx,.tcx,.fit">
+
+                <!-- 数据摘要信息 -->
+                <fieldset class="layui-elem-field">
+                    <legend>Information</legend>
+                    <div class="layui-field-box" id="jsonInfo"></div>
+                </fieldset>
+
+                <!-- 快捷按钮区（预览/暂停等） -->
+                <div id="fast_button"></div>
+
+                <!-- 横竖屏（画布比例）切换 -->
+                <div class="layui-btn-group" id="ratioSwitch" style="margin: 6px 0;">
+                    <div style="display: inline-block; height: 30px; line-height: 30px; padding: 0 10px; font-size: 14px; vertical-align: middle;">Ratio</div>
+                    <button type="button" class="layui-btn layui-btn-sm layui-btn-normal" id="ratio169" title="Landscape 1920×1080">16:9</button>
+                    <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" id="ratio916" title="Portrait 1080×1920">9:16</button>
+                </div>
+
+                <!-- 本地模板 保存 / 读取 -->
+                <div class="layui-btn-group" id="templateBar" style="margin: 6px 0;">
+                    <div style="display: inline-block; height: 30px; line-height: 30px; padding: 0 10px; font-size: 14px; vertical-align: middle;">Template</div>
+                    <button type="button" class="layui-btn layui-btn-sm layui-btn-normal" id="tplSaveBtn" title="Save the current canvas as a local template">Save Template</button>
+                    <button type="button" class="layui-btn layui-btn-sm layui-btn-primary" id="tplLoadBtn" title="Load / manage local templates">My Templates</button>
+                </div>
+
+                <!-- 面板切换（原生 / 本地 / 共享），位于分类列表与 DashB 标题之上 -->
+                <div class="panel-tabs" id="panelTabs">
+                    <span class="tab layui-this" data-panel="widget" id="tabWidget">Dashboard</span>
+                    <span class="tab" data-panel="local" id="tabLocal">Local</span>
+                    <span class="tab" data-panel="shared" id="tabShop">Shared</span>
+                </div>
+
+                <!-- 组件分类 Tab + 组件/本地/共享列表（左右对齐，同老款程序） -->
+                <div class="tt">
+                    <div class="demo-tab-header layui-btn-container layui-col-md3 grid-demo-bg1" id="tabHeader">
+
+                        <!-- Tab 由 JS 动态生成 -->
+                    </div>
+                    <div class="layui-col-md9" id="tabBodyWrap" style="padding:0;">
+                        <!-- 组件列表（由 WidgetPicker.js 动态填充） -->
+                        <div class="ws-docs-anim" id="widgetList"></div>
+                        <!-- 本地组件（浏览器 localStorage，studio 保存本地的作品；由 CustomComponentPanels.js 填充） -->
+                        <div id="localContainer" style="display: none;"></div>
+                        <!-- 共享组件（用户上传经服务器审核发布；由 CustomComponentPanels.js 填充） -->
+                        <div id="sharedContainer" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中间列：预览 + 视频渲染 -->
+            <div class="column column2" id="v" style="position: relative;">
+                <!-- 视频生成状态 -->
+                <div class="video-status" id="videoStatus">Ready to generate video...</div>
+
+                <!-- Leafer 前端预览容器 -->
+                <div id="appv"></div>
+
+                <!-- 隐藏 Canvas（视频帧导出用） -->
+                <canvas id="canv" width="1920" height="1080"></canvas>
+                <canvas id="videoCanvas" width="1920" height="1080"></canvas>
+
+                <!-- 视频帧生成用 Leafer 容器（离屏） -->
+                <div id="tempLeaferContainer"></div>
+
+                <!-- 预览进度条 + 播放/暂停（与画布同宽） -->
+                <div id="progressWrap">
+                    <button type="button" id="playBtn" title="Play/Pause">&#9654;</button>
+                    <input type="range" id="progressBar" min="0" max="2000" value="0">
+                </div>
+            </div>
+
+            <!-- 右侧列：设置面板 -->
+            <div class="column column3" id="settable" style="background-color: lightyellow;">
+                <p class="flex"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 应用入口（ES Module） ===== -->
+    <script type="module" src="./js/app.js?v=7"></script>
+</body>
+
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PulseFrame · Dashboard Designer (legacy)</title>
+
+    <!-- 第三方 CSS -->
+    <link rel="stylesheet" href="./css/layui.css">
+    <link rel="stylesheet" href="./css/app.css">
+    <link rel="stylesheet" href="./css/designer.css">
+
+    <!-- 第三方 JS -->
+    <script src="./lib/jquery-3.6.0.min.js"></script>
+    <script src="./lib/layui.js"></script>
+
+    <!-- 部署配置（本地文件，不进仓库）：apiBase / amapKey，写法见 site.config.example.js -->
+    <script src="./site.config.js" onerror="console.info('[PulseFrame] site.config.js 未放置，使用内置默认值')"></script>
+
+    <!-- Leafer Editor 2.2.11 -->
+    <script src="https://unpkg.com/leafer-editor@2.2.11/dist/web.min.js"></script>
+</head>
+<body>
+    <!-- ===== 顶部工具栏 ===== -->
+    <div class="designer-toolbar">
+        <div class="toolbar-left">
+            <span class="toolbar-title">Dashboard Designer</span>
+            <span class="toolbar-version">v2.0</span>
+        </div>
+        <div class="toolbar-center">
+            <button class="layui-btn layui-btn-xs layui-btn-normal" id="btnPreview">Preview</button>
+            <button class="layui-btn layui-btn-xs" id="btnUndo">Undo</button>
+            <button class="layui-btn layui-btn-xs" id="btnRedo">Redo</button>
+        </div>
+        <div class="toolbar-right">
+            <button class="layui-btn layui-btn-xs layui-btn-warm" id="btnExportJSON">Export JSON</button>
+            <button class="layui-btn layui-btn-xs layui-btn-warm" id="btnSaveLocal">Save to Local</button>
+            <button class="layui-btn layui-btn-xs layui-btn-normal" id="btnSubmitShop">Submit to Shop</button>
+            <button class="layui-btn layui-btn-xs layui-btn-danger" id="btnLoadTemplate">Load Template</button>
+            <a href="./index.html" class="layui-btn layui-btn-xs layui-btn-primary">Back to Editor</a>
+        </div>
+    </div>
+
+    <!-- ===== 三栏设计区 ===== -->
+    <div class="designer-layout">
+        <!-- 左侧：组件面板 -->
+        <div class="designer-left" id="designerLeft">
+            <div class="panel-header">Components</div>
+            <div class="panel-search">
+                <input type="text" id="componentSearch" placeholder="Search components...">
+            </div>
+            <div class="component-palette" id="componentPalette">
+                <!-- 由 ComponentPalette.js 动态填充 -->
+            </div>
+        </div>
+
+        <!-- 中间：设计画布 -->
+        <div class="designer-center">
+            <div class="canvas-toolbar">
+                <label>Canvas size:</label>
+                <select id="canvasSizeSelect">
+                    <option value="1920x1080">1920 × 1080 (Full HD)</option>
+                    <option value="1280x720">1280 × 720 (HD)</option>
+                    <option value="1080x1080">1080 × 1080 (Square)</option>
+                    <option value="1080x1920">1080 × 1920 (Vertical)</option>
+                </select>
+                <label style="margin-left: 15px;">Zoom:</label>
+                <select id="canvasZoom">
+                    <option value="0.25">25%</option>
+                    <option value="0.5" selected>50%</option>
+                    <option value="0.75">75%</option>
+                    <option value="1">100%</option>
+                </select>
+                <span class="canvas-info" id="canvasInfo">1920 × 1080</span>
+            </div>
+            <div class="canvas-wrapper" id="canvasWrapper">
+                <div id="designerCanvas"></div>
+            </div>
+            <!-- 底部数据预览 -->
+            <div class="data-preview" id="dataPreview">
+                <div class="panel-header">
+                    Data Preview
+                    <button class="layui-btn layui-btn-xs" id="btnTogglePreview">Collapse</button>
+                </div>
+                <div class="preview-content" id="previewContent">
+                    <div class="preview-controls">
+                        <button class="layui-btn layui-btn-xs" id="btnPlayPreview">Play</button>
+                        <button class="layui-btn layui-btn-xs" id="btnStopPreview">Stop</button>
+                        <input type="range" id="previewSlider" min="0" max="100" value="0" style="width: 200px;">
+                        <span id="previewFrame">Frame: 0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：属性编辑器 -->
+        <div class="designer-right" id="designerRight">
+            <div class="panel-header">Properties</div>
+            <div class="property-editor" id="propertyEditor">
+                <div class="property-empty">Select a component to edit its properties</div>
+            </div>
+            <div class="layer-panel" id="layerPanel">
+                <div class="panel-header">Layers</div>
+                <div class="layer-list" id="layerList">
+                    <!-- 由 DesignerApp.js 动态填充 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 应用入口 ===== -->
+    <script type="module" src="./js/designer/DesignerApp.js"></script>
+</body>
+</html>

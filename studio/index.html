@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PulseFrame Studio · Component Designer</title>
+
+    <!-- 主题前置脚本：首帧就写好 html[data-theme]（默认 light，用户改过则用 localStorage 里的偏好），避免闪色 -->
+    <script>document.documentElement.setAttribute('data-theme', (function(){ try { return localStorage.getItem('studio_theme') === 'dark' ? 'dark' : 'light'; } catch (e) { return 'light'; } })());</script>
+
+    <!-- 第三方样式（已随本目录自带，可独立运行） -->
+    <link rel="stylesheet" href="./css/layui.css">
+    <link rel="stylesheet" href="./css/app.css?v=7">
+    <!-- 设计器自身样式（本目录内，明暗双主题靠 --sp- 语义变量） -->
+    <link rel="stylesheet" href="./css/studio.css?v=20">
+
+    <!-- 部署配置（本地文件，不进仓库）：apiBase 等，写法见 site.config.example.js -->
+    <script src="../site.config.js" onerror="console.info('[PulseFrame] site.config.js 未放置，使用内置默认值')"></script>
+
+    <!-- Leafer Editor 2.2.11：优先本地 vendor（离线可用）；未放置则同步回退 CDN，保证在应用模块之前就绪 -->
+    <script src="./js/vendor/leafer-editor.web.min.js"></script>
+    <script>if(!window.LeaferUI){document.write('<script src="https://unpkg.com/leafer-editor@2.2.11/dist/web.min.js"><\/script>');}</script>
+</head>
+<body>
+    <!-- ===== 顶部工具栏 ===== -->
+    <div class="sp-toolbar">
+        <!-- Row 1: 身份 + 元信息 + 返回导航 -->
+        <div class="sp-tb-row sp-tb-row-meta">
+            <div class="sp-tb-left">
+                <span class="sp-title">PulseFrame Studio</span>
+                <span class="sp-sub">Dashboard Component Designer</span>
+            </div>
+
+            <div class="sp-tb-meta">
+                <label>Name <input type="text" id="metaName" placeholder="Component name"></label>
+                <label>Category
+                    <select id="metaCategory">
+                        <option value="time">Time</option>
+                        <option value="distance" selected>Distance</option>
+                        <option value="attr">Attribute</option>
+                        <option value="chart">Chart</option>
+                        <option value="text">Text</option>
+                        <option value="cycling">Cycling</option>
+                        <option value="theme">Theme</option>
+                    </select>
+                </label>
+                <label>Width <input type="number" id="metaWidth" min="1" value="400"></label>
+                <label>Height <input type="number" id="metaHeight" min="1" value="200"></label>
+                <label>ID <input type="text" id="metaId" placeholder="custom_xxx"></label>
+            </div>
+
+            <div class="sp-tb-nav">
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnHandbook" title="How to author a component, with a download link for the full AI manual">AI Handbook</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn sp-gbtn-theme" id="btnTheme" style="margin-left:0" title="Switch to dark theme">Dark Mode</button>
+                <a href="../index.html" class="layui-btn layui-btn-xs sp-gbtn sp-gbtn-strong g-nav" title="Open the main editor">Back to Editor</a>
+            </div>
+        </div>
+
+        <!-- Row 2: 动作按钮 -->
+        <div class="sp-tb-row sp-tb-row-actions">
+            <div class="sp-tb-group g-edit" title="Edit actions">
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnUndo" title="Ctrl+Z">Undo</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnRedo" title="Ctrl+Shift+Z">Redo</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnCopy" title="Ctrl+C copy current selection">Copy</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnPaste" title="Ctrl+V paste">Paste</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn sp-gbtn-strong" id="btnDeleteSel" title="Delete batch-remove current selection">Delete</button>
+            </div>
+            <div class="sp-tb-group g-file" title="Component file">
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnNew">New</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnReset" title="Clear all canvas layers, keep current component name/category/size, re-init canvas">Reset</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnOpenLocal">Open Local</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnOpenLib">Open Library</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnImport" title="Import from a .json file">Import</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnOpenJson" title="Paste Component Spec JSON and import after validation">Open JSON</button>
+            </div>
+            <div class="sp-tb-group g-save" title="Save & Output">
+                <button class="layui-btn layui-btn-xs sp-gbtn" id="btnExport">Export JSON</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn sp-gbtn-strong" id="btnSaveLocal" title="Ctrl+S">Save Local</button>
+                <button class="layui-btn layui-btn-xs sp-gbtn sp-gbtn-strong" id="btnSubmit">Submit to Library</button>
+            </div>
+            <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </div>
+    </div>
+
+    <!-- ===== 四列设计区：元素 | 画布 | 图层 | 属性 ===== -->
+    <div class="sp-layout">
+        <!-- 1. 元素 / 组件块 -->
+        <div class="sp-col sp-col-elements">
+            <div class="sp-panel-header">Elements / Blocks</div>
+            <div class="sp-scroll" id="spPalette"></div>
+        </div>
+
+        <!-- 2. 画布 + 预览 -->
+        <div class="sp-center">
+            <div class="sp-canvas-wrap"><div id="studioCanvas"></div></div>
+            <div class="sp-preview-bar">
+                <span class="sp-preview-title">Data Preview</span>
+                <div id="spPreview"></div>
+            </div>
+        </div>
+
+        <!-- 3. 图层（窄列，可拖拽排序/进出组） -->
+        <div class="sp-col sp-col-layers">
+            <div class="sp-panel-header">Layers</div>
+            <div class="sp-scroll sp-layer-scroll" id="spLayers"></div>
+        </div>
+
+        <!-- 4. 属性 / 绑定 -->
+        <div class="sp-col sp-col-props">
+            <!-- 多选时出现：快速对齐 + 批量赋值 -->
+            <div id="spBatchWrap" hidden>
+                <div class="sp-panel-header">Batch / Align</div>
+                <div class="sp-scroll sp-batch-scroll" id="spBatch"></div>
+            </div>
+            <div class="sp-panel-header">Properties</div>
+            <div class="sp-scroll sp-props-scroll" id="spProps"></div>
+            <div class="sp-panel-header">Data Binding</div>
+            <div class="sp-scroll sp-bind-scroll" id="spBindings"></div>
+        </div>
+    </div>
+
+    <script type="module" src="./js/StudioApp.js?v=20"></script>
+</body>
+</html>
