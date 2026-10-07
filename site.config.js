@@ -24,7 +24,7 @@
  */
 
 window.PULSEFRAME_CONFIG = {
-    apiBase: 'https://sportsfile.data4u.vip/pages/server/api.php',
+    apiBase: 'https://sportsfile.data4u.vip/server/api.php',
 
     /**
      * Per-host overrides, used when the same build serves several domains
