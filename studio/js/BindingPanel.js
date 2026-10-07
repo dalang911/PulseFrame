@@ -11,7 +11,8 @@ import { fieldsByGroup } from './fieldCatalog.js';
 
 // 每个 type 的可绑定属性 → 允许的 mode 列表（'none' 表示解除绑定）
 // 判据：属性在 PropsPanel 可编辑 + bindingEngine 各 mode 天然支持任意数字属性（size/angle 用 binding.prop 定位）
-// x+size = 位置扫描游标（设计 x 填满宽，比例×满宽→横扫）；rotation+angle = 指针旋转（默认左上角轴心，指针做成从轴心伸出的形态即可居中）
+// x+size = 位置扫描游标：缺省 设计x × 比例→从 0 横扫；给 from/to 则按行程起点→终点线性映射（如进度条跟随圆点）
+// rotation+angle = 指针旋转（默认左上角轴心，指针做成从轴心伸出的形态即可居中）
 const BINDABLE = {
     rect:    { x: ['size', 'none'], y: ['size', 'none'], width: ['size', 'none'], height: ['size', 'none'], fill: ['color', 'none'], stroke: ['color', 'none'], strokeWidth: ['size', 'none'], rotation: ['angle', 'none'], cornerRadius: ['size', 'none'], opacity: ['opacity', 'none'], visible: ['visible', 'none'] },
     ellipse: { x: ['size', 'none'], y: ['size', 'none'], width: ['size', 'none'], height: ['size', 'none'], fill: ['color', 'none'], stroke: ['color', 'none'], strokeWidth: ['size', 'none'], rotation: ['angle', 'none'], opacity: ['opacity', 'none'], visible: ['visible', 'none'] },
@@ -62,7 +63,12 @@ function defaultBinding(mode, layer, prop) {
     const hb = FIELD_DEFAULT_BOUNDS.heart_rate, db = FIELD_DEFAULT_BOUNDS.distance, pb = FIELD_DEFAULT_BOUNDS.pct;
     switch (mode) {
         case 'text': return { mode: 'text', field: 'distance', decimal: 1 };
-        case 'size': return { mode: 'size', field: 'distance', min: db.min, max: db.max };
+        case 'size':
+            // x/y 位置游标：默认把当前设计坐标当作行程终点（先把圆点拖到终点再绑定即可），起点固定 0；from/to 可改
+            if (prop === 'x' || prop === 'y') {
+                return { mode: 'size', field: 'distance', min: db.min, max: db.max, from: 0, to: Number(layer.props[prop]) || 0 };
+            }
+            return { mode: 'size', field: 'distance', min: db.min, max: db.max };
         case 'angle': return prop === 'rotation'
             ? { mode: 'angle', field: 'azimuth', min: 0, max: 360, from: 0, to: 360 }
             : {
@@ -164,6 +170,10 @@ class BindingPanel {
                     + `<label class="sp-mini sp-check"><span>Unit</span><input type="checkbox" data-k="unit" ${b.unit ? 'checked' : ''}></label>`;
                 break;
             case 'size':
+                // 位置游标（x/y）额外露出行程起止坐标；width/height 等仍为纯比例×满值，无 from/to
+                if (prop === 'x' || prop === 'y') inner += num('from', 'From (start)') + num('to', 'To (end)');
+                inner += bound('min', 'Min') + bound('max', 'Max');
+                break;
             case 'opacity':
                 inner += bound('min', 'Min') + bound('max', 'Max');
                 break;

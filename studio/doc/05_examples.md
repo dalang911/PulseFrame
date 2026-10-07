@@ -183,12 +183,13 @@
       "props": { "x": 30, "y": 100, "width": 340, "stroke": "#333344", "strokeWidth": 2, "rotation": 0, "opacity": 1 },
       "bindings": {} },
     { "uid": "Lcur", "name": "cursor", "type": "rect", "visible": true,
-      "props": { "x": 340, "y": 60, "width": 8, "height": 80, "fill": "#32cd79", "cornerRadius": 4, "rotation": 0, "opacity": 1 },
-      "bindings": { "x": { "mode": "size", "field": "pct", "min": 0, "max": 1 } } }
+      "props": { "x": 362, "y": 60, "width": 8, "height": 80, "fill": "#32cd79", "cornerRadius": 4, "rotation": 0, "opacity": 1 },
+      "bindings": { "x": { "mode": "size", "field": "pct", "min": 0, "max": 1, "from": 30, "to": 362 } } }
   ]
 }
 ```
-> 游标的 `props.x=340` 是"最右端"坐标；`size` 把 `pct`(0..1) 乘到 340 → 游标从 `x≈0` 横扫到 `x=340`。要留左边距就在外面套一个 `group` 整体偏移。
+> 不写 `from/to` 时：游标的 `props.x=340` 是"最右端"坐标，`size` 把 `pct`(0..1) 乘到 340 → 游标从 `x≈0` 横扫到 `x=340`（起点固定 0）。
+> 本例要沿 `axis`（x=30→370）扫且游标宽 8 不出界，故用 `from: 30, to: 362` 把行程起点/终点都显式设好：`el.x = from + pct × (to − from)`。
 
 ---
 

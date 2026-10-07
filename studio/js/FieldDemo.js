@@ -133,8 +133,8 @@ function exDots(ox, oy) {
 
 /** ⑧ 水平扫描游标（size→x 位置绑定）：圆点在轨道上随距离横扫
  *
- * 要点：size 模式是「设计值×比例」，会丢掉图层自身偏移 → 把游标放进一个
- * 起手于轨道起点的 group 里，组内设计 x=轨道满宽即可从 0 扫到满宽。
+ * 要点：size 模式缺省是「设计值×比例」（起点固定 0），所以这里把游标放进一个
+ * 起手于轨道起点的 group 里对齐原点；若给 from/to 直接指定行程起止坐标就不必套组，见 ⑨。
  * （同理可绑 y 做升降；想要“高→顶”反向就用 值最大-字段 类字段或接受自上而下）
  */
 function exScan(ox, oy) {
@@ -151,6 +151,25 @@ function exScan(ox, oy) {
                 makeLayer('ellipse', { name: 'ex-yc-dot', props: { x: 420, y: 78, width: 22, height: 22, fill: C.orange, stroke: C.white, strokeWidth: 2 }, bindings: { x: { mode: 'size', field: 'distance', prop: 'x', min: 0, max: 'totalDistance' } } })
             ]
         })
+    ];
+}
+
+/** ⑨ 圆点骑在进度条 Fill 端点上（x 游标 from/to）
+ *
+ * 对比 ⑧：给了 from/to 后，size→x 改为 from + 比例×(to−from) 线性映射，
+ * 起点不再是固定 0 → 顶层图层直接绑即可，不必再套 group 对齐原点；
+ * to = 条宽 − 点宽，圆点全程留在条内、随 Fill 端点同步横扫。
+ * （字段/边界与 Fill 的 width 绑定完全一致 → 两者严格同步）
+ */
+function exDotOnFill(ox, oy) {
+    const barW = 420, barH = 24, dot = 26, barY = oy + 56;
+    return [
+        makeLayer('text', { name: 'ex-dof-title', props: { x: ox, y: oy + 8, text: '⑨ Fill-Edge Dot (x from/to)', fontSize: 22, fontWeight: 'bold', fill: C.white, textAlign: 'left', verticalAlign: 'top' } }),
+        makeLayer('rect', { name: 'ex-dof-track', props: { x: ox, y: barY, width: barW, height: barH, fill: C.track, cornerRadius: barH / 2 } }),
+        makeLayer('rect', { name: 'ex-dof-fill', props: { x: ox, y: barY, width: barW, height: barH, fill: C.green, cornerRadius: barH / 2 }, bindings: { width: { mode: 'size', field: 'distance', prop: 'width', min: 0, max: 'totalDistance' } } }),
+        // 圆点垂直居中于条：y = 条 y + (条高 − 点径)/2；x 行程 ox → ox+条宽−点宽
+        makeLayer('ellipse', { name: 'ex-dof-dot', props: { x: ox, y: barY + (barH - dot) / 2, width: dot, height: dot, fill: C.orange, stroke: C.white, strokeWidth: 2 }, bindings: { x: { mode: 'size', field: 'distance', prop: 'x', min: 0, max: 'totalDistance', from: ox, to: ox + barW - dot } } }),
+        makeLayer('text', { name: 'ex-dof-cap', props: { x: ox, y: barY + 40, text: 'x = from + ratio × (to − from) · dot stays inside the bar', fontSize: 15, fill: C.gray, textAlign: 'left', verticalAlign: 'top' } })
     ];
 }
 
@@ -226,12 +245,13 @@ class FieldDemo {
         layers.push(...exRing(CX0, r1));
         layers.push(...exHRZone(CX1, r1));
         layers.push(...exCompass(CX2, r1));
-        const r2 = r1 + 260;     // 行3：里程碑 / 扫描游标
+        const r2 = r1 + 260;     // 行3：里程碑 / 扫描游标 / Fill 端点圆点
         layers.push(...exDots(CX0, r2));
         layers.push(...exScan(CX1, r2));
+        layers.push(...exDotOnFill(CX2, r2));
         const exBottom = r2 + 170;
 
-        const finalW = Math.max(W, CX2 + 340);
+        const finalW = Math.max(W, CX2 + 440);
         const finalH = Math.max(H, exBottom);
 
         // 扩容组件盒以容纳全部内容（fit 缩放会自动把全部元素显示到可视区内）

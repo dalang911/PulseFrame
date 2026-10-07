@@ -80,14 +80,16 @@ export const MODES = {
     },
 
     // 尺寸（进度条/柱状）：以设计基准宽/高为满值，按 0..1 归一后乘
+    // 可选 from/to（位置游标）：给定时改为线性映射 from + t*(to-from)，起点不再是固定 0（与 studio 引擎同步）
     size(el, binding, layer, { frameData, ctx, progress, scale }) {
         const propKey = binding.prop || 'width';
         let base = Number(layer.props[propKey]) || 0;
         // 图层 props 存的是「设计尺寸」下的基准；容器被 resize 后子元素由 Box.resizeChildren 等比放大，
         // 若不换算，进度条/定位等每帧都会回写成变形前的值（尺寸对了但条短一截、位置偏移）
         // 轴向：height / y 取 scale.y，其余（width / x / strokeWidth / cornerRadius / 半径）取 scale.x
+        const isY = propKey === 'height' || propKey === 'y';
         if (scale) {
-            const s = (propKey === 'height' || propKey === 'y') ? scale.y : scale.x;
+            const s = isY ? scale.y : scale.x;
             if (s && s !== 1) base *= s;
         }
         const v = fieldValue(binding.field, frameData, ctx, progress);
@@ -95,7 +97,20 @@ export const MODES = {
         const max = resolveBound(binding.max, frameData, ctx, progress);
         const ratio = normalize(v, min, max == null ? base : max);
         // max 未给定时：若字段本身是比例(0..1)直接用，否则按 totalDistance 等边界由调用方提供
-        el[propKey] = base * (binding.max == null ? clamp(v, 0, 1) : ratio);
+        const t = binding.max == null ? clamp(v, 0, 1) : ratio;
+        if (binding.from != null || binding.to != null) {
+            // 游标映射：from=行程起点（缺省 0）、to=行程终点（缺省设计基准值）；
+            // from/to 同为设计坐标，须与 base 一样按轴向缩放到变形后的 px 空间
+            let from = binding.from != null ? Number(binding.from) : 0;
+            let to = binding.to != null ? Number(binding.to) : base;
+            if (scale) {
+                const s = isY ? scale.y : scale.x;
+                if (s && s !== 1) { from *= s; to *= s; }
+            }
+            el[propKey] = from + t * (to - from);
+            return;
+        }
+        el[propKey] = base * t;
     },
 
     // 角度（环形仪表 endAngle）：值线性映射到 [from,to]

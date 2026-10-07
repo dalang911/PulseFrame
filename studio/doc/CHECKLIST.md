@@ -117,5 +117,5 @@ function validateSpec(spec) {
 | 区间变色 | `fill`/`stroke`，`color` 绑 `field`+`thresholds`+`base` |
 | 渐显/点亮 | `visible` 绑 `field`+`threshold` |
 | 淡入淡出 | `opacity` 绑 `field`+`min`/`max` |
-| 横扫游标 | `x`（或 `y`）用 `size` 绑 `pct`，`props.x`=终点 |
+| 横扫游标 | `x`（或 `y`）用 `size` 绑 `pct`，`props.x`=终点；要设起点加 `from`/`to`（行程起止坐标） |
 | 自适应满量程 | `min`/`max` 填**字段名**字符串（如 `"totalKm"`、`"heartRateMax"`） |

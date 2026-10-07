@@ -57,11 +57,13 @@ min = binding.min ?? 0
 max = binding.max
 若 max 未给 → el[prop] = base * clamp(v, 0, 1)        // 直接把 v 当 0..1 比例
 若 max 已给 → ratio = normalize(v, min, max); el[prop] = base * ratio
+若 from/to 已给（x/y 游标）→ t = 上面的比例；el[prop] = from + t * (to - from)
 ```
 - **满量程 = 你在 `props` 里写的该属性值**。进度条做法：把 `props.width` 设计成"满条"的宽度，绑 `width` + `size` + `field` + `min`/`max`。
 - `min`/`max` 可以是数字，也可以是**字段名**（字符串），见 [03_fields.md](03_fields.md)。
 - 若字段本身就是 0..1（如 `pct`、`hrPct`），可以不写 `max`，引擎会 `clamp(v,0,1)` 直接用。
-- 把 `x`/`y` 当 `size` 目标 = **位置扫描游标**：`props.x` 写成"填满"时的坐标，比例 × 满值实现横扫/纵扫。
+- 把 `x`/`y` 当 `size` 目标 = **位置扫描游标**：缺省 `props.x` 写成"终点"坐标，比例 × 满值实现横扫/纵扫（起点固定 0）。
+- 游标要**设起点**就加 `from`/`to`（行程起/止坐标，数字）：引擎改为 `from + 比例 × (to − from)` 线性映射；在面板里绑 x/y 时会出现 From (start) / To (end) 两个输入框。例：进度条跟随圆点，条满宽 400、圆点宽 30，则 `from: 0, to: 370` 让圆点全程留在条内。
 
 ### `angle`
 ```
