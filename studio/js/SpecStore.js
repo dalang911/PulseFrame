@@ -281,6 +281,54 @@ class SpecStore {
         this.commit('reorder');
     }
 
+    /** targetUid 是否落在 uid 自己的子树内（防止把组拖进自己的子孙形成环） */
+    _isInSubtree(uid, targetUid) {
+        const f = this.findLayer(uid);
+        if (!f || f.layer.type !== 'group') return false;
+        return !!this.findLayer(targetUid, f.layer.children || []);
+    }
+
+    /**
+     * 拖拽重排：把节点移到同级目标的前/后，或放进组内。
+     * mode：'before' = 数组中排在目标之前（更靠下层）；'after' = 之后（更靠上层）；
+     *       'into' = 放入目标组的最上层，targetUid 为 null 时挂到根顶层（即移出组）。
+     * 返回是否真的改变了位置（未变则不进历史）。
+     */
+    moveNodeTo(uid, targetUid, mode = 'after') {
+        const src = this.findLayer(uid);
+        if (!src || uid === targetUid) return false;
+
+        let arr, index;
+        if (mode === 'into') {
+            if (targetUid) {
+                const t = this.findLayer(targetUid);
+                if (!t || t.layer.type !== 'group' || this._isInSubtree(uid, targetUid)) return false;
+                if (!Array.isArray(t.layer.children)) t.layer.children = [];
+                arr = t.layer.children;
+                index = arr.length;                    // 落入组内 = 组里最上层
+            } else {
+                arr = this.spec.layers;
+                index = arr.length;                    // 拖到空白 = 移出组并挂到根顶层
+            }
+        } else {
+            const t = this.findLayer(targetUid);
+            if (!t || this._isInSubtree(uid, targetUid)) return false;
+            arr = t.arr;
+            index = mode === 'after' ? t.index + 1 : t.index;
+        }
+
+        // 同一父数组内先移除会把后面的元素前移一位，插入点要跟着补偿
+        const sameArr = src.arr === arr;
+        let to = index;
+        if (sameArr && src.index < to) to -= 1;
+        if (sameArr && to === src.index) return false;  // 位置没变，别污染历史
+
+        const [item] = src.arr.splice(src.index, 1);
+        arr.splice(to, 0, item);
+        this.commit('reorder');
+        return true;
+    }
+
     // 绑定
     setBinding(uid, prop, binding) {
         const f = this.findLayer(uid);
