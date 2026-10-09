@@ -2,22 +2,6 @@
 
 这一篇讲"一份 JSON 从生成到能用"的完整链路，以及所有相关端点与键名。
 
-## 访问与部署
-
-| 用途 | 地址 |
-|---|---|
-| Studio 页面（线上） | `https://pulseframe.data4u.vip/studio/index.html` |
-| 服务端 API | `https://sportsfile.data4u.vip/pages/server/api.php` |
-| 本地源码 | 仓库内 `studio/index.html`（若站点根下有指向本仓库的 `pages` 软链，**改仓库即改线上**，无需另外拷贝） |
-
-API 基址由 `appConfig.apiBase()` 解析，优先级：
-`window.PULSEFRAME_CONFIG.apiBase` → `<meta name="pulseframe:api-base">` → `apiBaseByHost[hostname]` → 由当前 URL 推导（`server/` 与 app 目录同级）。
-所以换域名部署时端点会自动跟着变，一般无需硬编码。
-
-> **改完前端怎么生效（缓存）**：本项目的 `studio/js/**` 与所有 HTML 资产引用**一律不带 `?v=`**——相对路径直连模块 URL，同一个模块就只有一份实例，不会因版本号不一致触发双 `specStore` / 双 `studioCanvas`。静态资源由 CDN（如 Cloudflare）12 小时缓存；**每次部署后去 CDN 手动 Purge Everything**（或在 CI 调 Purge API），旧副本即被刷新。历史曾出现过半量升版导致的静默播放失效，现 `StudioCanvas` / `StudioPreview` / `SpecStore` 末尾各自保留一段“第二个实例注册时置 `window.__spDup`”的自检作安全网——在当前无 `?v=` 的方案下它不该命中，命中即说明有人在某个 import 边上加回了版本号。
-
----
-
 ## 顶栏工具按钮（工作流入口）
 
 元信息输入框：`Name` / `Category` / `Width` / `Height` / `ID`（对应 `spec.meta`，`ID` 只保留 `[A-Za-z0-9_]`，且**不允许与已有组件撞 id**，见下文“组件 ID 撞车防护”）。

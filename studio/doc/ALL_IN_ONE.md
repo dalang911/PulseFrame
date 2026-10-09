@@ -1,12 +1,5 @@
 # PulseFrame Studio — AI 生成手册（单文件版）
 
-> **本文件自包含**：生成合法、可在 Studio 导入并正常运行的 Component Spec JSON
-> 所需的全部规则都在这里，**无需读取任何其它文件或网页**。按 `§00 速查内核` → 需要细节再往下查各章。
->
-> ⚠️ **产物文件，请勿手改**：由 `tools/build_docs_single.py` 合并 `studio/doc/` 下的
-> 分篇源文件自动生成。改内容请改分篇，然后跑 `python3 tools/build_docs_single.py`。
-> 分篇文件同时保留（按需检索/向量库切片用），两边靠脚本保持同源。
-
 ## 目录
 
 - [§00 速查内核](#part-00)
@@ -93,9 +86,6 @@ PulseFrame Studio 是一个**声明式**组件设计器：一个组件 = 一组 
 + 把运动数据映射到图层属性的**数据绑定**（`bindings`）。**没有 JavaScript**，因此共享组件可安全自动加载。
 
 - 本地文件：`studio/index.html`（仓库根目录）
-- 线上访问：`https://pulseframe.data4u.vip/index.html`（Studio：`https://pulseframe.data4u.vip/studio/index.html`）
-- 服务端 API（导入库/提交）：`https://sportsfile.data4u.vip/pages/server/api.php`
-- 渲染引擎：Leafer Editor 2.2.11
 
 ### 阅读顺序
 
@@ -109,14 +99,7 @@ PulseFrame Studio 是一个**声明式**组件设计器：一个组件 = 一组 
 | [§05 完整示例](#part-06) | 可直接复制的完整示例（进度条/环形仪表/大数值卡/心率区间色条/罗盘/里程碑/扫描游标） | 抄结构改参数最快 |
 | [§ 自检清单](#part-07) | 生成前 / 生成后的逐项检查清单 | 每次产出 JSON 前后都跑一遍 |
 
-> **另有一个单文件版 [ALL_IN_ONE.md](ALL_IN_ONE.md)**（约 1200 行 / 70 KB 量级，自包含、无跨文件跳转），
-> 适合整份贴进对话窗口或塞进 system prompt。它是**产物，请勿手改**：
-> 改上面任何一篇后运行 `python3 tools/build_docs_single.py` 重新生成（`--check` 可验证是否同步）。
-> 分篇文件同时保留，供按文件名精确检索与向量库切片。
->
-> 站点里顶栏的 **AI Handbook** 按钮就是这份单文件版的下载入口（`studio/js/HandbookDialog.js`，
-> 弹窗正文是给使用者看的简版说明）。`studio/doc/` 是普通静态目录，**部署时必须一并带上**，
-> 否则下载会 404（弹窗会探一次体量，拿不到就标红写明“manual not deployed”，不让人猜）。
+
 
 ### 30 秒上手：最小合法组件
 
@@ -668,21 +651,6 @@ Studio 里切换 `field` 会自动把 `min`/`max` 重设成下表的默认边界
 
 这一篇讲"一份 JSON 从生成到能用"的完整链路，以及所有相关端点与键名。
 
-### 访问与部署
-
-| 用途 | 地址 |
-|---|---|
-| Studio 页面（线上） | `https://pulseframe.data4u.vip/studio/index.html` |
-| 服务端 API | `https://sportsfile.data4u.vip/pages/server/api.php` |
-| 本地源码 | 仓库内 `studio/index.html`（若站点根下有指向本仓库的 `pages` 软链，**改仓库即改线上**，无需另外拷贝） |
-
-API 基址由 `appConfig.apiBase()` 解析，优先级：
-`window.PULSEFRAME_CONFIG.apiBase` → `<meta name="pulseframe:api-base">` → `apiBaseByHost[hostname]` → 由当前 URL 推导（`server/` 与 app 目录同级）。
-所以换域名部署时端点会自动跟着变，一般无需硬编码。
-
-> **改完前端怎么生效（缓存）**：本项目的 `studio/js/**` 与所有 HTML 资产引用**一律不带 `?v=`**——相对路径直连模块 URL，同一个模块就只有一份实例，不会因版本号不一致触发双 `specStore` / 双 `studioCanvas`。静态资源由 CDN（如 Cloudflare）12 小时缓存；**每次部署后去 CDN 手动 Purge Everything**（或在 CI 调 Purge API），旧副本即被刷新。历史曾出现过半量升版导致的静默播放失效，现 `StudioCanvas` / `StudioPreview` / `SpecStore` 末尾各自保留一段“第二个实例注册时置 `window.__spDup`”的自检作安全网——在当前无 `?v=` 的方案下它不该命中，命中即说明有人在某个 import 边上加回了版本号。
-
----
 
 ### 顶栏工具按钮（工作流入口）
 

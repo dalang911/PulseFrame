@@ -14,8 +14,6 @@ PulseFrame Studio 是一个**声明式**组件设计器：一个组件 = 一组 
 + 把运动数据映射到图层属性的**数据绑定**（`bindings`）。**没有 JavaScript**，因此共享组件可安全自动加载。
 
 - 本地文件：`studio/index.html`（仓库根目录）
-- 线上访问：`https://pulseframe.data4u.vip/index.html`（Studio：`https://pulseframe.data4u.vip/studio/index.html`）
-- 服务端 API（导入库/提交）：`https://sportsfile.data4u.vip/pages/server/api.php`
 - 渲染引擎：Leafer Editor 2.2.11
 
 ## 阅读顺序
