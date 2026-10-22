@@ -13,7 +13,7 @@ need no build tooling at all.
 ```bash
 git clone https://github.com/dalang911/pulseframe.git
 cd pulseframe
-cp site.config.example.js site.config.js    # untracked; holds your keys and API URL
+cp site.config.example.js site.config.js    # optional; untracked file for your own keys
 python3 -m http.server 8080                 # ES modules need http://, not file://
 ```
 

@@ -20,8 +20,10 @@
     <script src="./lib/layui.js"></script>
     <script src="./lib/maptalks.min.js"></script>
 
-    <!-- 部署配置（本地文件，不进仓库）：apiBase / amapKey 等，写法见 site.config.example.js -->
-    <script src="./site.config.js" onerror="console.info('[PulseFrame] site.config.js 未放置，使用内置默认值')"></script>
+    <!-- 默认配置（仓库内跟踪）：公开 demo 的 apiBase / amapKey，页面纯静态部署即可直接用 -->
+    <script src="./site.config.example.js" onerror="console.info('[PulseFrame] site.config.example.js 缺失，改由本地 site.config.js 提供配置')"></script>
+    <!-- 部署配置（本地文件，不进仓库）：紧随其后加载，整份覆盖上面的默认值 -->
+    <script src="./site.config.js" onerror="console.info('[PulseFrame] 未放置本地 site.config.js，沿用 site.config.example.js 的默认值')"></script>
 
     <!-- 高德地图 JS API（可选）：只有配置了 amapKey 才加载；maptalks 系列图层不需要它 -->
     <script>

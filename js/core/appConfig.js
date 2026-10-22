@@ -12,10 +12,12 @@
  *   3. <meta name="pulseframe:api-base" content="...">
  *   4. derived from the current URL: server/ is expected next to the app folder
  *
- * Example, put this in the page before the module scripts:
+ * Example. The page loads site.config.example.js (tracked demo defaults) and then
+ * site.config.js (git-ignored, your own values) before the module scripts, so
+ * this is normally a file rather than inline markup:
  *   <script>
  *     window.PULSEFRAME_CONFIG = {
- *         apiBase: 'https://sportsfile.data4u.vip/pages/server/api.php',
+ *         apiBase: 'https://sportsfile.data4u.vip/server/api.php',
  *         amapKey: 'your-own-key',
  *     };
  *   </script>

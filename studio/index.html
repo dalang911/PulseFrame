@@ -14,8 +14,10 @@
     <!-- 设计器自身样式（本目录内，明暗双主题靠 --sp- 语义变量） -->
     <link rel="stylesheet" href="./css/studio.css">
 
-    <!-- 部署配置（本地文件，不进仓库）：apiBase 等，写法见 site.config.example.js -->
-    <script src="../site.config.js" onerror="console.info('[PulseFrame] site.config.js 未放置，使用内置默认值')"></script>
+    <!-- 默认配置（仓库内跟踪）：公开 demo 的 apiBase 等 -->
+    <script src="../site.config.example.js" onerror="console.info('[PulseFrame] site.config.example.js 缺失，改由本地 site.config.js 提供配置')"></script>
+    <!-- 部署配置（本地文件，不进仓库）：紧随其后加载，整份覆盖上面的默认值 -->
+    <script src="../site.config.js" onerror="console.info('[PulseFrame] 未放置本地 site.config.js，沿用 site.config.example.js 的默认值')"></script>
 
     <!-- Leafer Editor 2.2.11：优先本地 vendor（离线可用）；未放置则同步回退 CDN，保证在应用模块之前就绪 -->
     <script src="./js/vendor/leafer-editor.web.min.js"></script>

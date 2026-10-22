@@ -82,7 +82,7 @@ To copy the sample into your own library: `samples/demo-run.gpx` can be dragged 
 
 ## Configuration
 
-All deployment-specific values live in **`site.config.js`**, which is *not* tracked by git. Copy the example and edit:
+Two files, loaded in that order, hold the configuration: **`site.config.example.js`** is tracked and carries the shared demo values, so a static deploy built straight from the repo works with no setup; **`site.config.js`** is git-ignored, loaded immediately after, and is where your own keys belong. To start from the demo values:
 
 ```bash
 cp site.config.example.js site.config.js
@@ -93,7 +93,7 @@ works out of the box:
 
 ```js
 window.PULSEFRAME_CONFIG = {
-    apiBase: 'https://sportsfile.data4u.vip/pages/server/api.php',
+    apiBase: 'https://sportsfile.data4u.vip/server/api.php',
     apiBaseByHost: {
         // 'www.example.com': 'https://api.example.com/server/api.php',
     },
@@ -107,7 +107,7 @@ window.PULSEFRAME_CONFIG = {
 | `apiBaseByHost` | Map of `hostname` → API URL, used when one build serves several domains. |
 | `amapKey` | AMap (高德) JS API key. Only needed for the AMap tile layer; maptalks layers work without it. A demo key is pre-filled so the map components light up on first run — **replace it with your own** as soon as you deploy anywhere real, and apply for a key at <https://console.amap.com>. |
 
-`<script src="./site.config.js">` is loaded before the modules in `index.html`, `designer.html` and `studio/index.html`. A `<meta name="pulseframe:api-base">` tag is honoured too, which is handy for one-off embeds.
+Both config scripts are loaded before the modules in `index.html`, `designer.html` and `studio/index.html` — `site.config.example.js` first, `site.config.js` after it. A `<meta name="pulseframe:api-base">` tag is honoured too, but note it sits *below* `apiBase` in the resolution order: because the tracked example fills `apiBase` in, the meta tag only takes effect once your own `site.config.js` sets `apiBase: ''`.
 
 ## Project layout
 
@@ -115,7 +115,7 @@ window.PULSEFRAME_CONFIG = {
 pulseframe/
 ├── index.html            # main editor
 ├── designer.html         # visual designer (layout + property editor)
-├── site.config.example.js# template for the untracked local config
+├── site.config.example.js# tracked demo defaults (site.config.js overrides, untracked)
 ├── css/                  # app + designer styles, layui & maptalks css
 ├── js/
 │   ├── app.js            # editor entry point
@@ -140,7 +140,8 @@ pulseframe/
 ## The shared template store
 
 The *Shared* panel browses a community store over a single HTTP endpoint. Its
-URL comes from `apiBase` in `site.config.js`, or from the derivation described
+URL comes from `apiBase` in `site.config.js` — or, when you have no local file,
+from the tracked `site.config.example.js` — or from the derivation described
 in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) §3. That is all a client of the
 store needs to know.
 

@@ -50,8 +50,10 @@ A page boots in this sequence, and each step depends on the previous one:
    `lib/maptalks.min.js`, then the parser primitives `js/parsers/GPXParser.js`,
    `TCXParser.js`, `FitParser.js` (they register `window`-level constructors, they
    are *not* modules), and Leafer (`window.LeaferUI`).
-2. **`site.config.js`** (untracked, optional) sets `window.PULSEFRAME_CONFIG`
-   before any module reads it. Missing file → defaults, logged, not fatal.
+2. **The config scripts** set `window.PULSEFRAME_CONFIG` before any module reads
+   it: `site.config.example.js` (tracked, shared demo values) loads first, then
+   `site.config.js` (git-ignored, your deployment's values) replaces it wholesale.
+   Either file missing → the next step's defaults apply, logged, not fatal.
 3. **The module graph** starts from `js/app.js` (or `designer/DesignerApp.js`,
    `studio/js/StudioApp.js`).
 4. `js/app.js` imports `./components/definitions/index.js` for its side effect —

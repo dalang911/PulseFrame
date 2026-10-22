@@ -38,20 +38,26 @@ graph into two registries / two stores and causes silent playback bugs.
 
 ## 2. Configuration: `site.config.js`
 
-Create it from the example; it is git-ignored because you will typically swap the
-shared demo values for your own:
+Two files supply `window.PULSEFRAME_CONFIG`, loaded in this order:
+
+| File | In git? | Role |
+|---|---|---|
+| `site.config.example.js` | yes | the shared demo values — a static deploy straight from this repo works with no setup |
+| `site.config.js` | no (git-ignored) | your deployment's values; loaded second, so it replaces the example wholesale |
+
+Copy the example when you want your own:
 
 ```bash
 cp site.config.example.js site.config.js
 ```
 
-The example is pre-filled with two shared defaults so a fresh clone browses the
-public store and renders the map components immediately:
+The example ships two shared defaults so a fresh clone browses the public store
+and renders the map components immediately:
 
 ```js
 window.PULSEFRAME_CONFIG = {
     // points at the public demo store; set to '' to derive from your own URL
-    apiBase: 'https://sportsfile.data4u.vip/pages/server/api.php',
+    apiBase: 'https://sportsfile.data4u.vip/server/api.php',
     apiBaseByHost: {
         // only needed when the store lives on a different origin than the app
         // 'www.example.com': 'https://api.example.com/server/api.php',
@@ -69,10 +75,11 @@ Publishing back is a separate concern of the store itself: this frontend does
 not implement or document how a store identifies a user or decides whether to
 accept a submission.
 
-`index.html`, `designer.html` and `studio/index.html` load this file before the
-modules. If it is missing the app still runs on the derivation described below
-and logs one line — you can delete the file entirely and everything except the
-AMap tile layer keeps working.
+`index.html`, `designer.html` and `studio/index.html` load both files before the
+modules. Deleting `site.config.example.js` is possible but rarely useful: `apiBase`
+then falls back to the derivation described below, which only resolves when a
+store genuinely sits next to the app folder. Everything except the AMap tile layer
+keeps working either way.
 
 The same values can be provided without a file:
 
@@ -89,6 +96,9 @@ The same values can be provided without a file:
 2. `PULSEFRAME_CONFIG.apiBaseByHost[location.hostname]`
 3. `<meta name="pulseframe:api-base">`
 4. **derived** from the current URL
+
+The tracked `site.config.example.js` fills slot 1, so a `<meta>` tag only reaches
+the top when your `site.config.js` sets `apiBase: ''`.
 
 The derivation walks up from the page path to the folder that contains the
 frontend, then across to a sibling `server/`:
@@ -125,15 +135,19 @@ switching `apiBase`, a hard reload may be needed.
 The public demo runs at:
 
 ```
-https://pulseframe.data4u.vip/              frontend (this repo)
+https://pulseframe.data4u.vip/              frontend (this repo, built by Cloudflare Pages)
 https://pulseframe.data4u.vip/studio/       PulseFrame Studio
-https://sportsfile.data4u.vip/pages/server/api.php   shared store (apiBase)
+https://sportsfile.data4u.vip/server/api.php   shared store (apiBase)
 ```
 
-Frontend and store are same-origin there, so a clone can simply leave `apiBase`
-empty and the derived default resolves correctly. Set `apiBase` (or an
-`apiBaseByHost` entry) only if you mirror the frontend to another hostname that
-does not sit alongside a store.
+Frontend and store sit on **different hosts** here, so the derived default does
+*not* resolve correctly on this instance — `https://pulseframe.data4u.vip` would
+derive `https://pulseframe.data4u.vip/server/api.php`, which does not exist. The
+tracked `site.config.example.js` sets `apiBase` to the store above for exactly
+this reason, and because Pages builds straight from the repository it is also
+what the live site runs on. Leave `apiBase` empty only when your own store really
+is a sibling of the app folder; otherwise set `apiBase` (or an `apiBaseByHost`
+entry).
 
 ## 5. Optional: no store at all
 
@@ -158,7 +172,10 @@ See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) §2 for the exact list.
 ## 7. Deploy checklist (frontend)
 
 - [ ] `site.config.js` present on the server, absent from git, with your own
-      AMap key (do not ship production traffic on the shared demo key)
+      AMap key (do not ship production traffic on the demo key that the tracked
+      `site.config.example.js` carries). When a host builds straight from this
+      repository — Cloudflare Pages does — only the example is in the output
+      unless you inject your own `site.config.js` at deploy time.
 - [ ] `apiBase()` resolves to the intended URL (open the console: the shop logs
       its request; the response should be JSON)
 - [ ] HTTPS + HSTS at the edge
