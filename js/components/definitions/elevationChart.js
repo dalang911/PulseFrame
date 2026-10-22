@@ -15,6 +15,8 @@ const OPTS = {
     areaColor: 'rgba(139,69,19,0.3)',
     iconPath: mountain_icon,
     iconScale: 0.04,
+    // mountain_icon 这条 path 的自然包围盒（实测自 Leafer），只用于让图标绕中心缩放
+    iconNatural: [896, 640],
     iconColorKey: 'colors.icon',
     pointsKey: 'pt_ele_points',
     maxKey: 'eleMax',

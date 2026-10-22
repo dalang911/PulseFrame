@@ -220,6 +220,19 @@ coordinates in `build()` (into an array you copied), write design × `resizeScal
 in `update()`, and the layers stay welded together at any size. Get either half
 wrong and the component only looks right at its default dimensions.
 
+Two `scale`-related traps live on the same mechanism, both fixed in
+`definitions/chartCommon.js`. A filled area polygon must **not** inherit the
+curve's `curve: true`: Leafer smooths the whole closed path, and the single long
+segment that closes the shape along the baseline gets dragged into a wave that
+pokes outside the plot rect. Keep the area straight-segmented and clamp its
+vertices into the plot rect — with thousands of points per chart, straight versus
+smooth is sub-pixel anyway. And `scale` transforms are anchored at the element's
+top-left, so a corner icon grows toward the bottom-right; counter-translate its
+`x`/`y` by `(factor - 1) × naturalSize × defaultScale ÷ 2` in `build()`, then
+recompute the same offset against `resizeScale()` in `update()`, because a resize
+multiplies `x`/`y` but never `scale`. Both offsets are exactly zero at the default
+factor, which is what keeps old templates pixel-identical.
+
 Cost matters: `update()` runs once **per frame per component**, twice when the
 memory canvas is active, thousands of times during one export. No sorting, no
 regex compilation, no `new` arrays per call — precompute in `build()`. Scanning

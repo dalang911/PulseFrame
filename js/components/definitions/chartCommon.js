@@ -15,14 +15,23 @@
  *    开关键不在 LAYOUT_KEYS 里，改它必然走 rebuildBoxChildren 整体重建，天然生效。
  *    因此 update() 一律按 name 取子元素，不能再按下标写死 —— 图层关掉后下标会平移。
  * 3) 面积填充必须排在曲线之前：Leafer 按 children 顺序绘制，后画的盖在上面。
+ *    并且面积多边形只走直线段、顶点先夹进绘图区 —— 见 chartChildren 第 3 步的注释，
+ *    闭合折线一旦交给 curve 平滑，底边会在两个角之间鼓出绘图框。
  * 4) 缩放契约见 docs：Box.resizeChildren 会在每次改尺寸时「就地」把子元素的
  *    points/x/y/width/height 乘上 新÷旧，所以 build 只写设计坐标，
  *    update 每帧回写的位置要乘 resizeScale，且绝不能把 store 里的数组直接交给子元素。
+ * 5) 右下角图标围绕「默认尺寸下的中心」放大缩小（iconNatural 是各图标 path 的
+ *    自然包围盒，实测自 Leafer）。build 写设计坐标、update 每帧按当前缩放比重算，
+ *    iconSize=1 时两处都精确回到升级前写死的 360/160（及其缩放值），默认观感不变；
+ *    换图标记得同步改 iconNatural，写错只会让中心略偏，不会崩。
  */
 import { resizeScale, plotInsets } from '../../utils/math.js';
 
 /** 设计绘图区尺寸与内缩边距（三个图表共用，放大后刻度线/圆点不越界） */
 export const CHART_W = 400, CHART_H = 200, CHART_PADX = 14, CHART_PADY = 18;
+
+/** 右下角图标左上角的设计锚点：升级前三个图表都是写死的这一对值，别动 */
+const ICON_X = 360, ICON_Y = 160;
 
 /**
  * 数字回落：缺省/空串/非数字一律退回老款写死的那个值。
@@ -177,7 +186,8 @@ export function chartChildren(o, config, data) {
     const labelFS = num(config.labelFontSize, 20);
     const valueFS = num(config.valueFontSize, 24);
     const dotSize = num(config.dotSize, 13);
-    const iconScale = o.iconScale * num(config.iconSize, 1);
+    const iconFactor = num(config.iconSize, 1);
+    const iconScale = o.iconScale * iconFactor;
     // 图标颜色：新键 colors.icon → 组件老配置里已有的图标键 → 跟随线色
     const iconColor = firstColor(
         pick(config, o.iconColorKey),
@@ -217,13 +227,26 @@ export function chartChildren(o, config, data) {
     // 3) 面积填充：画在曲线之前才不会被曲线盖住。
     //    曲线点 + 右下角 + 左下角再闭合，就是常见的「面积图」填充。
     //    inset.points() 每次返回新数组，这里 concat 出的也是新数组，不会污染 store。
+    //
+    //    两个刻意的保守处理（都是为了让填充绝不越出绘图区）：
+    //    a) 顶点先夹进 [x0,x1]×[y0,y1]。正常数据本来就在区间内，夹了等于没夹；
+    //       万一某条轨迹的预计算点超出量程，也只是贴边，不会画到面板外面。
+    //    b) 面积一律用直线段，不跟 curveStyle。实测：把闭合多边形交给 Leafer 的
+    //       curve 平滑，底边那条 372px 的长线段会被两端切线拽出波浪，鼓到下面
+    //       标尺线以外（用户反馈的「Area 背景色跑到外面」）。数据点密到每段不到
+    //       0.2px，直线段和曲线在视觉上重合，所以关掉平滑没有代价。
     if (showArea && pts.length >= 2) {
         const flat = inset.points(pts);
-        const base = inset.y(H);
+        const x0 = inset.x(0), x1 = inset.x(W), y0 = inset.y(0), y1 = inset.y(H);
+        for (let i = 0; i < flat.length; i += 2) {
+            flat[i] = Math.min(x1, Math.max(x0, flat[i]));
+            flat[i + 1] = Math.min(y1, Math.max(y0, flat[i + 1]));
+        }
+        const xFirst = flat[0], xLast = flat[flat.length - 2];
         children.push({
             tag: 'Line', lockRatio: true, closed: true,
-            points: flat.concat([flat[flat.length - 2], base, flat[0], base]),
-            fill: areaColor, ...curveStyle
+            points: flat.concat([xLast, y1, xFirst, y1]),
+            fill: areaColor
         });
     }
 
@@ -242,9 +265,19 @@ export function chartChildren(o, config, data) {
         });
     }
 
-    // 6) 右下角图标
+    // 6) 右下角图标：围绕「默认尺寸下的中心」放大缩小
+    //    Leafer 的 scale 以元素左上角为原点，所以直接调 scale 会让图标往右下角长
+    //    （用户反馈：应该绕中心）。这里按倍率差把左上角反向挪半个身位补回来：
+    //    挪动量 = 自然尺寸 × 默认缩放 × (倍率 - 1) ÷ 2，iconSize=1 时为 0，
+    //    x/y 精确回到老款写死的 360/160 —— 默认观感逐位不变。
     if (showIcon) {
-        children.push({ tag: 'Rect', x: 360, y: 160, scale: iconScale, path: o.iconPath, fill: iconColor });
+        const [nw, nh] = o.iconNatural || [0, 0];
+        const drift = (iconFactor - 1) * o.iconScale / 2;
+        children.push({
+            name: 'now_icon',
+            tag: 'Rect', x: ICON_X - nw * drift, y: ICON_Y - nh * drift,
+            scale: iconScale, path: o.iconPath, fill: iconColor
+        });
     }
 
     // 7) 当前值文本：贴在进度线右侧，x 由 update() 跟随
@@ -286,6 +319,17 @@ export function chartUpdate(o, box, frameData, progress, ctx) {
 
     const valueText = byName('now_text');
     if (valueText) valueText.text = o.formatValue(frameData);
+
+    // 角标图标钉位：Leafer 的 scale 以元素左上角为原点，而 resizeChildren 只乘 x/y 不乘 scale，
+    // 所以偏移量不能交给缩放去乘，每帧按当前缩放比重算一次。
+    // iconSize=1 时偏移为 0，x/y 恰好等于 resizeChildren 已经写好的 360×scale —— 默认观感逐位不变。
+    const icon = byName('now_icon');
+    if (icon && o.iconNatural) {
+        const [nw, nh] = o.iconNatural;
+        const drift = (num(box.__leaferConfig && box.__leaferConfig.iconSize, 1) - 1) * o.iconScale / 2;
+        icon.x = ICON_X * scale.x - nw * drift;
+        icon.y = ICON_Y * scale.y - nh * drift;
+    }
 
     const i = ctx.currentFrame;
     if (pts.length > i * 2 + 1) {

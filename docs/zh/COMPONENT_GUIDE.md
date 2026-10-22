@@ -220,3 +220,5 @@ const allDefinitions = [
 5. **颜色格式**：优先 `#RRGGBB`；需要透明度时直接写 `rgba(r,g,b,a)` 或 `#RRGGBBAA`（Leafer 与颜色选择器都支持 alpha，所以组件不再单列「透明度」设置项）
 6. **缩放契约**：外层 Box 带 `resizeChildren`，改尺寸的那一刻 Leafer 会**就地**把每个子元素的 `points` / `x` / `y` / `width` / `height` 乘上 新尺寸÷旧尺寸。累计效果 = 当前尺寸÷设计尺寸，所以 `update()` 回写坐标要乘 `resizeScale(box, defW, defH)`，而 `build()` 里必须把 `data._chartData` 的数组复制一份再交给子元素（`points: mapPoints.slice()`）——否则 store 里的设计坐标会被改写，下一帧再乘一次就成了二次缩放，各层随之错位
 7. **子元素顺序**：`build()` 返回的顺序就是绘制顺序（后面的盖在前面的上面，所以高程图的面积填充排在曲线之前），顺序不能随意重排。图层开关靠「不生成这个子元素」实现（`lapPanels.js`、`chartCommon.js` 都是这样），默认全部开启时生成的列表要和加开关之前完全一致，老模板才像素不变；一旦有元素可能缺席，`update()` 就按 `name` 取，别按下标
+8. **面积填充别交给 `curve`**：闭合多边形一旦被 Leafer 平滑，底边那条横跨绘图区的长线段会被两端切线拽出波浪、鼓到标尺以外（用户反馈过的「Area 背景色跑到外面」）。`chartCommon.js` 里面积一律用直线段，并且顶点先夹进 `[x0,x1]×[y0,y1]`；数据点密到每段不到 0.2px，直线段和曲线在视觉上重合，关掉平滑没有代价
+9. **`scale` 类图标要绕中心缩放得自己补位**：Leafer 的 `scale` 以元素左上角为原点，直接调倍率图标会往右下角长。`chartCommon.js` 的做法是 `build()` 按 `(倍率-1)` 反向挪左上角、`update()` 再按当前缩放比重算一次（`resizeChildren` 只乘 `x/y` 不乘 `scale`），偏移量在 `iconSize=1` 时精确为 0，所以默认位置和升级前逐位相同。代价是各组件要在 `iconNatural` 里存自己 path 的自然包围盒（实测自 Leafer），换图标记得同步改

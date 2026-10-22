@@ -14,6 +14,8 @@ const OPTS = {
     areaColor: 'rgba(199,21,133,0.25)',
     iconPath: heart_icon,
     iconScale: 0.03,
+    // heart_icon 这条 path 的自然包围盒（实测自 Leafer），只用于让图标绕中心缩放
+    iconNatural: [1024, 917.72928],
     iconColorKey: 'colors.icon',
     // 老配置里已有 colors.heartIcon，继续认它，老模板换色不会失效
     iconColorFallbacks: ['colors.heartIcon'],

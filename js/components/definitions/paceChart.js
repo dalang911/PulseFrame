@@ -15,6 +15,8 @@ const OPTS = {
     areaColor: 'rgba(0,206,209,0.25)',
     iconPath: run_icon,
     iconScale: 0.03,
+    // run_icon 这条 path 的自然包围盒（实测自 Leafer 的全精度值），只用于让图标绕中心缩放
+    iconNatural: [897.96661978, 932.2609105099841],
     iconColorKey: 'colors.icon',
     pointsKey: 'pt_paces_points',
     // 配速图的量程其实是速度（km/h），刻度文本再转成 mm'ss"
