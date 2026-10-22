@@ -69,6 +69,34 @@ A definition may also set `isBackground: true` (fills the canvas, is *not*
 rescaled — see §5) or `lockAsBackground: true` (`editable = false`, so it cannot
 be dragged or selected by click, but a pointer hit still opens its settings).
 
+### Settings control types
+
+`renderSettings()` (`js/ui/PropertyRenderer.js`) turns each `settings` entry into
+one row. Supported `item.type`:
+
+| `type` | Row | Value written back |
+|---|---|---|
+| `title` | section heading, no input | — |
+| `number` | number input (`min`/`max`/`step`) | `parseFloat`, `0` when blank |
+| `color`, `bg_color` | colour picker (layui in the editor, native in Studio) | `#rrggbb` |
+| `select` | dropdown from `item.options` (`{value,label}`) | the string `value` |
+| `boolean` | checkbox | `true` / `false` |
+| `text` *(default)* | free text input | the string |
+| `bg_image` | preset thumbnail row + file input | preset url or dataURL |
+| `image_picker` | preset thumbnails (click = use) + optional “none” cell + upload button that resamples the file to a 1:1 PNG dataURL (`item.uploadSize`, default 256) | preset url, `''` for none, or `data:image/png;base64,…` |
+| `font_selector` | font dropdown | font name |
+| `unit_button` | button that opens the global unit dialog | nothing — it ignores `key` and edits `unitConfig` |
+
+`displayValue = config[key] ?? item.defaultValue ?? ''`, so a row can echo the value
+`build()` actually falls back to even for templates saved before the key existed —
+keep the two in sync.
+
+**Key naming matters.** `applyPropertyChange()` treats `x`, `y`, `width`, `height`,
+`rotation`, `opacity`, `cornerRadius`, `fill`, `stroke`, `strokeWidth` as layout keys:
+it writes them straight onto the `Box` and never re-runs `build()`. A setting meant to
+change something a child element owns therefore needs a distinct key
+(`routeCornerRadius`, `pointStrokeWidth`, …), otherwise it silently edits the wrapper.
+
 ## 2. Register it
 
 Add the import and the entry in `js/components/definitions/index.js`:
@@ -187,10 +215,12 @@ listener that emits `COMPONENT_SELECTED`. Then:
 2. The `Box` is resized to the target size, which scales the children.
 3. `box.__leaferConfig` stores the merged config for the property panel.
 
-Only the differences from `defaultConfig` are serialised into a template, under
-`customProps` with keys `child_{index}_{property}` (`fill`, `stroke`, `fontSize`,
-`strokeWidth` are what the extractors currently read). See
-[COMPONENT_JSON_SPEC.md](COMPONENT_JSON_SPEC.md).
+Only the differences from `defaultConfig` are serialised into a template. Your
+semantic settings go into `components[i].config` (`js/utils/configDiff.js`); the older
+`customProps` block still records positional child styles under
+`child_{index}_{property}` (`fill`, `stroke`, `fontSize`, `strokeWidth`), but nothing
+reads those keys back, so `config` is what makes a saved template look the same on
+reload. See [COMPONENT_JSON_SPEC.md](COMPONENT_JSON_SPEC.md).
 
 **Consequence:** if you add a field to `defaultConfig`, existing saved templates
 still load — they simply do not have that key. Provide a sane fallback wherever you

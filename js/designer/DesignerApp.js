@@ -11,6 +11,7 @@ import { canvas } from './Canvas.js';
 import { propertyEditor } from './PropertyEditor.js';
 import { exporter } from './Exporter.js';
 import { preview } from './Preview.js';
+import { mergeSavedConfig } from '../utils/configDiff.js';
 
 // ===== DOM 就绪后初始化 =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -202,6 +203,8 @@ function loadTemplateToCanvas(template) {
             width: comp.width,
             height: comp.height
         };
+        // 合并保存的真实设置项（旧模板没有 config 字段时保持原行为）
+        mergeSavedConfig(configOverrides, comp.config);
         // 合并保存的自定义样式属性
         if (comp.customProps) {
             Object.assign(configOverrides, comp.customProps);

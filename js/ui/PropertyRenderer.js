@@ -12,6 +12,7 @@
 
 import { openUnitConfigDialog } from './UnitConfigDialog.js';
 import { loadAndApplyFont } from '../core/GlobalFont.js';
+import { imageToSquareDataUrl, presetNameOf } from '../utils/images.js';
 
 // 预定义颜色（与原版一致）
 export const PRESET_COLORS = [
@@ -224,6 +225,119 @@ function createRow(item, config, onChange, useNativeColor, cssPrefix) {
                 reader.readAsDataURL(file);
             });
             inputDiv.appendChild(fileInput);
+            break;
+        }
+
+        case 'image_picker': {
+            // 复杂多行布局：预设缩略图（点一下就用它）+ 本地上传（自动拉伸成 1:1）
+            row.style.alignItems = 'flex-start';
+            inputDiv.style.cssText = 'flex:1 1 auto; min-width:0; margin:0; display:flex; flex-direction:column; gap:4px;';
+
+            const presets = item.presets || [];
+            const allowNone = !!item.allowNone;
+            const current = String(displayValue || '');
+            const NONE_MARK = '__none__';
+
+            // 当前值回显（预设名 / 已上传 / 外链 / 未选择）
+            const status = document.createElement('div');
+            status.style.cssText = 'font-size:10px; color:#999; line-height:1.4; width:100%; word-break:break-all;';
+            const describe = (v) => {
+                // NONE_MARK 只是「无」格的选中态标记，不是真实值，回显按未选择处理
+                if (!v || v === NONE_MARK) return allowNone ? '未选择（使用组件默认样式）' : '未选择';
+                if (v.startsWith('data:')) {
+                    const kb = Math.round(v.length * 0.75 / 1024);
+                    return `已上传本地图片（内嵌 ${kb} KB）`;
+                }
+                const name = presetNameOf(v, presets);
+                if (name) return `预设：${name}`;
+                return `外部链接：${v.length > 40 ? v.slice(0, 40) + '…' : v}`;
+            };
+            status.textContent = describe(current);
+
+            // 需要跟随选中态高亮的方块（预设 + 可选的「无」）
+            const marks = [];
+            const setActive = (picked) => {
+                marks.forEach(m => { m.el.style.borderColor = m.value === picked ? '#1890ff' : '#e6e6e6'; });
+                status.textContent = describe(picked);
+                status.style.color = '#999';
+            };
+
+            const grid = document.createElement('div');
+            grid.style.cssText = 'display:flex; flex-wrap:wrap; gap:4px; width:100%;';
+
+            if (allowNone) {
+                const none = document.createElement('div');
+                none.textContent = '无';
+                none.title = '不使用自定义图片';
+                none.style.cssText = 'width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; font-size:11px; color:#666; border:2px solid #e6e6e6; border-radius:3px; cursor:pointer; background:#fafafa;';
+                none.onclick = () => { onChange(item.key, ''); setActive(NONE_MARK); };
+                marks.push({ el: none, value: NONE_MARK });
+                grid.appendChild(none);
+            }
+
+            presets.forEach((p, idx) => {
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'cursor:pointer; text-align:center; flex:0 0 auto;';
+                const im = document.createElement('img');
+                const label = p.name || `预设 ${idx + 1}`;
+                im.src = p.url;
+                im.alt = label;
+                im.title = label;
+                im.draggable = false;
+                im.style.cssText = 'width:40px; height:40px; object-fit:cover; border:2px solid #e6e6e6; border-radius:3px; display:block;';
+                im.onerror = () => { im.style.opacity = .3; im.title = `${label}（图片加载失败）`; };
+                im.onclick = () => { onChange(item.key, p.url); setActive(p.url); };
+                marks.push({ el: im, value: p.url });
+                const cap = document.createElement('div');
+                cap.textContent = String(idx + 1);
+                cap.style.cssText = 'font-size:10px; color:#999; margin-top:2px;';
+                wrap.appendChild(im);
+                wrap.appendChild(cap);
+                grid.appendChild(wrap);
+            });
+
+            // 初始高亮：命中预设就亮那张；空值（允许不选时）亮「无」；上传的 dataURL 不属于任何预设，全不亮
+            const initialMark = !current
+                ? (allowNone ? NONE_MARK : '')
+                : (presetNameOf(current, presets) ? current : '');
+            marks.forEach(m => { m.el.style.borderColor = m.value === initialMark ? '#1890ff' : '#e6e6e6'; });
+
+            const uploadBtn = document.createElement('button');
+            uploadBtn.type = 'button';
+            uploadBtn.className = 'layui-btn layui-btn-xs layui-btn-normal';
+            const uploadText = item.uploadText || 'Upload image (stretched to 1:1)';
+            uploadBtn.textContent = uploadText;
+            uploadBtn.style.cssText = 'height:24px; line-height:24px; padding:0 8px; font-size:11px; width:100%; margin:0;';
+
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.style.display = 'none';
+            fileInput.addEventListener('change', async () => {
+                const file = fileInput.files && fileInput.files[0];
+                fileInput.value = '';       // 先清空，允许重复选同一张
+                if (!file) return;
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = '处理中…';
+                try {
+                    const dataUrl = await imageToSquareDataUrl(file, item.uploadSize || 256);
+                    onChange(item.key, dataUrl);
+                    setActive('');          // 自定义图不在预设里，取消所有高亮
+                    status.textContent = describe(dataUrl) + ` · 源文件 ${file.name}`;
+                } catch (err) {
+                    status.textContent = '上传失败：' + (err && err.message ? err.message : err);
+                    status.style.color = '#d93025';
+                } finally {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = uploadText;
+                }
+            });
+            uploadBtn.onclick = () => fileInput.click();
+
+            inputDiv.appendChild(grid);
+            inputDiv.appendChild(uploadBtn);
+            inputDiv.appendChild(fileInput);
+            inputDiv.appendChild(status);
             break;
         }
 

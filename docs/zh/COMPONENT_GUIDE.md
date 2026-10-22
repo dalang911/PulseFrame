@@ -158,11 +158,24 @@ const allDefinitions = [
 
 | type | 说明 | 额外属性 |
 |------|------|----------|
+| `title` | 分组标题，无输入框 | - |
 | `color` | 颜色选择器 | - |
 | `number` | 数字输入 | `min`, `max`, `step` |
 | `text` | 文本输入 | - |
 | `select` | 下拉选择 | `options: [{ value, label }]` |
 | `boolean` | 开关 | - |
+| `bg_image` | 预设背景图缩略图 + 本地文件输入 | - |
+| `image_picker` | 预设图片点选（点哪张用哪张）+ 可选「无」格 + 上传按钮（本地图片自动重采样成 1:1 PNG dataURL） | `presets: [{ url, name }]`, `allowNone`, `uploadText`, `uploadSize`（默认 256） |
+| `font_selector` | 字体名输入 + 预设字体按钮 | - |
+| `unit_button` | 打开全局单位设置弹窗，不读写组件 config | `buttonText` |
+
+面板回显取 `config[key] ?? item.defaultValue ?? ''`：模板是在新增某个键之前保存的
+时，`defaultValue` 要和 `build()` 里的兜底值保持一致。
+
+**键名要避开布局键**：`applyPropertyChange()` 把 `x`/`y`/`width`/`height`/`rotation`/
+`opacity`/`cornerRadius`/`fill`/`stroke`/`strokeWidth` 视为布局键，直接写到底层 `Box`
+且不会重跑 `build()`。想改子元素属性的设置项必须另起键名（如 `routeCornerRadius`、
+`pointStrokeWidth`），否则改的是外层容器。
 
 ### dataBindings 可用字段
 

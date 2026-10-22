@@ -5,6 +5,7 @@
 
 import { registry } from '../components/registry.js';
 import { apiBase } from '../core/appConfig.js';
+import { extractConfigDiff } from '../utils/configDiff.js';
 
 const STORAGE_PREFIX = 'designer_';
 
@@ -34,6 +35,8 @@ class Exporter {
                 height: child.height,
                 rotation: child.rotation || 0,
                 scale: child.scale || 1,
+                // 与 TemplateManager 一致的字段，保证两个导出入口产出同一种模板
+                config: extractConfigDiff(child.__leaferConfig, definition.defaultConfig),
                 customProps: this._extractCustomProps(child)
             });
         });

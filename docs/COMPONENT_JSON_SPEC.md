@@ -30,6 +30,7 @@ loader to use.
       "width": 400, "height": 200,
       "rotation": 0,
       "scale": 1,
+      "config": { "colors": { "background": "#1a1a2e", "needle": "#C71585", "ruler": "#ffffff", "text": "#ffffff" }, "maxValue": 180 },
       "customProps": { "child_1_stroke": "#C71585" }
     }
   ],
@@ -56,7 +57,8 @@ loader to use.
 | `width`, `height` | number | box size; the factory builds at the definition's default geometry and then scales children to this size |
 | `rotation` | number | degrees, default `0` |
 | `scale` | number | default `1` |
-| `customProps` | object | style overrides only — see below |
+| `customProps` | object | legacy positional style dump — see below |
+| `config` | object | the component's own settings, as a diff from `defaultConfig` |
 
 ### `customProps`
 
@@ -76,7 +78,35 @@ to remain the same element.
 
 On load, `customProps` is merged into the config overrides passed to
 `addComponentToCanvas()`, so it lands in `box.__leaferConfig` together with `x`, `y`,
-`width`, `height`.
+`width`, `height` — but `build()` reads semantic keys (`config.avatarUrl`,
+`config.pointSize`), never `child_0_fill`, so **these values are written and then
+ignored**. They are kept for compatibility with templates already in the shop; the
+real payload is `config`.
+
+### `config`
+
+`extractConfigDiff()` (`js/utils/configDiff.js`) diffs `box.__leaferConfig` against
+`definition.defaultConfig` and writes only the keys the user actually changed:
+
+```json
+"config": { "avatarUrl": "./icon/i3.png", "pointSize": 40, "showStartEnd": true }
+```
+
+Rules:
+
+- `x`/`y`/`width`/`height`/`rotation`/`scale` are excluded — the top-level fields own
+  the geometry.
+- Values equal to the default are omitted, so adding a setting never enlarges an
+  untouched template, and a template stays valid when a definition gains new defaults.
+- Anything that cannot be `JSON.stringify`-ed (a Leafer instance, a cyclic object) is
+  skipped rather than throwing.
+- On load, `mergeSavedConfig()` copies it into the overrides *before* `customProps`,
+  then the factory merges the overrides over `defaultConfig`.
+- Old templates simply have no `config` key and behave exactly as before.
+
+An uploaded avatar/icon is stored as a `data:image/png;base64,…` string inside
+`config`, which is why the shop's 2 MB cap matters: a 256×256 PNG costs roughly
+30–60 KB per image.
 
 ### Known limitations (deliberate, but worth knowing)
 

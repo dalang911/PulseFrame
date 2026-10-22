@@ -13,6 +13,7 @@
  */
 
 import { go_board_strokes, go_board_black_cells } from '../../utils/icons.js';
+import { AVATAR_PRESETS } from '../../utils/images.js';
 
 const textshadow = { x: 2, y: 2, blur: 0, color: '#333333' };
 
@@ -61,7 +62,7 @@ const zh_distance_pan = {
         { name: 'Node/Text Color', key: 'nodeColor', type: 'color' },
         { name: 'Progress Color', key: 'currentColor', type: 'color' },
         { name: 'Progress Text Color', key: 'progressTextColor', type: 'color' },
-        { name: 'Avatar URL', key: 'avatarUrl', type: 'text' }
+        { name: 'Avatar', key: 'avatarUrl', type: 'image_picker', presets: AVATAR_PRESETS }
     ],
     build(config, data) {
         const trkpt = data?.data?.trkpt || [];

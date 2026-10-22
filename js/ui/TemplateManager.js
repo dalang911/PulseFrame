@@ -9,6 +9,7 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { apiBase } from '../core/appConfig.js';
 import { registry } from '../components/registry.js';
 import { addComponentToCanvas, clearAllComponents, resizeBackground } from '../components/factory.js';
+import { extractConfigDiff, mergeSavedConfig } from '../utils/configDiff.js';
 
 const STORAGE_PREFIX = 'frameConfig_';
 
@@ -39,6 +40,8 @@ class TemplateManager {
                 height: child.height,
                 rotation: child.rotation || 0,
                 scale: child.scale || 1,
+                // 真实设置项差异（build() 读的语义键），载入时合并回 config overrides
+                config: extractConfigDiff(child.__leaferConfig, definition.defaultConfig),
                 // 保存子元素的自定义属性（颜色等）
                 customProps: this._extractCustomProps(child, definition)
             });
@@ -93,6 +96,8 @@ class TemplateManager {
                 width: comp.width,
                 height: comp.height
             };
+            // 先合并真实设置（旧模板没有 config 字段 → 保持原行为）
+            mergeSavedConfig(configOverrides, comp.config);
             if (comp.customProps) {
                 Object.assign(configOverrides, comp.customProps);
             }

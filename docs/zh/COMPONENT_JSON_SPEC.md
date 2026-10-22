@@ -74,11 +74,31 @@
 | `height` | number | ✅ | 组件高度（像素） |
 | `rotation` | number | - | 旋转角度（度），默认 0 |
 | `scale` | number | - | 缩放比例，默认 1 |
-| `customProps` | object | - | 自定义属性（与默认配置的差异） |
+| `customProps` | object | - | 旧版位置式样式快照（只写不读，见下） |
+| `config` | object | - | 组件真实设置项（与 `defaultConfig` 的差异），载入时合并回 overrides |
+
+### config 说明
+
+`extractConfigDiff()`（`js/utils/configDiff.js`）比较 `box.__leaferConfig` 和
+`definition.defaultConfig`，只把用户改过的键写进模板：
+
+```json
+"config": { "avatarUrl": "./icon/i3.png", "pointSize": 40, "showStartEnd": true }
+```
+
+- `x`/`y`/`width`/`height`/`rotation`/`scale` 不重复写入，几何信息以顶层字段为准。
+- 与默认值相同的键一律省略，所以新增设置项不会撑大既有模板。
+- 无法 `JSON.stringify` 的值（Leafer 实例、循环引用）跳过而不抛错。
+- 旧模板没有 `config` 字段，载入行为与以前完全一致。
+- 上传的头像/图标以 `data:image/png;base64,…` 存在 `config` 里，一张 256×256 PNG
+  约 30–60 KB，注意商店 2 MB 上限。
 
 ### customProps 说明
 
 `customProps` 保存用户对组件样式的手动调整，仅记录与 `defaultConfig` 不同的值。
+**注意：`build()` 读的是语义键（如 `config.avatarUrl`），不会读 `child_0_fill`
+这类键，因此这部分内容写入后并不会被消费**——为了兼容商店里已有的模板而保留，
+真正生效的是上面的 `config`。
 
 键名格式：`child_{index}_{property}`
 
