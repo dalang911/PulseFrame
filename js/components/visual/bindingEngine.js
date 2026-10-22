@@ -11,8 +11,21 @@ import { speedToPace } from '../../utils/format.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+/** 秒 → 时钟字符串：<1h 为 m:ss，否则 h:mm:ss */
+const fmtClock = (total) => {
+    total = Math.max(0, Math.round(total || 0));
+    const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    const p = (n) => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`;
+};
+
 /**
  * 解析字段值。支持轨迹点字段、派生字段、chartData 极值/引用。
+ *
+ * 与 studio/js/runtime/bindingEngine.js 保持逐字一致：Studio 里能绑的字段，
+ * 编辑器与视频导出必须算得出同样的值。改这里请同时改那边，
+ * 然后跑 tools/field-parity.html 确认两边没有再漂移。
+ *
  * @param {string} field
  * @param {Object} frameData - 当前帧轨迹点
  * @param {Object} ctx - { trkptData, currentFrame, maxFrame, chartData }
@@ -31,6 +44,40 @@ export function fieldValue(field, frameData, ctx, progress) {
         case 'totalDistance': return lastPt.distance || 0;
         case 'totalKm': return (lastPt.distance || 0) / 1000;
         case 'duration': return lastPt.sec || 0;
+        // —— 派生量（跑步/骑行通用，均由 frameData + 末点 + chartData 现算）——
+        case 'elapsedMin': return (frameData.sec || 0) / 60;
+        case 'avgSpeed': { const s = frameData.sec || 0; return s > 0 ? (frameData.distance || 0) * 3.6 / s : 0; } // m, s → km/h
+        case 'avgPace': { const a = fieldValue('avgSpeed', frameData, ctx, progress); return a > 0 ? speedToPace(a) : 0; }
+        case 'remainDistance': return Math.max(0, (lastPt.distance || 0) - (frameData.distance || 0));
+        case 'remainKm': return Math.max(0, ((lastPt.distance || 0) - (frameData.distance || 0)) / 1000);
+        case 'relAltitude': return (frameData.altitude || 0) - (cd.baseAltitude || 0);
+        case 'hrPct': { const mx = cd.user_heartRateMax || cd.heartRateMax || 0; return mx > 0 ? (frameData.heart_rate || 0) / mx : 0; }
+        // —— 格式化时间（文本专用，返回字符串，不宜做 size/angle 数值归一）——
+        case 'elapsedTime': return fmtClock(frameData.sec || 0);
+        case 'totalTime': return fmtClock(lastPt.sec || 0);
+        case 'remainTime': { const s = frameData.sec || 0, d = frameData.distance || 0; const rd = (lastPt.distance || 0) - d; return (d > 0 && rd > 0) ? fmtClock(rd * s / d) : fmtClock(0); }
+        // —— 配速边界（min/km）：chartData.paceMin/paceMax 存的是速度极值(km/h)，
+        //    配速与其互为倒数：最慢配速=60/最小速度，最快配速=60/最大速度。
+        //    另设 paceBoundMin/paceBoundMax 字段引用供 gauge 绑 pace 字段作 min/max；
+        //    不改写 paceMin/paceMax 本身（速度仪表绑定依赖其原始 km/h 语义）；
+        //    若无速度极值则退回逐帧扫描，扫描时必须跳过 0 速度点——起步/暂停/结尾必然有 0，
+        //    而 computeChartPoints 的 paceMin 正是被这些 0 拉成 0 才走到扫描分支的。
+        //    若扫描取最大速度当 paceBoundMin，它会和 paceBoundMax 算成同一个数，
+        //    gauge 的 normalize 遇到 max===min 直接返回 0，配速表整条恒空。——
+        case 'paceBoundMin': {                                  // 最慢配速 = 60 / 最小速度
+            const spd = +(cd.paceMin || 0);
+            if (spd > 0) return 60 / spd;
+            let mn = Infinity;
+            for (let i = 0; i < trk.length; i++) { const s = +trk[i].speed || 0; if (s > 0 && s < mn) mn = s; }
+            return mn < Infinity ? 60 / mn : 0;
+        }
+        case 'paceBoundMax': {                                 // 最快配速 = 60 / 最大速度
+            const spd = +(cd.paceMax || 0);
+            if (spd > 0) return 60 / spd;
+            let mx = 0;
+            for (let i = 0; i < trk.length; i++) { const s = +trk[i].speed || 0; if (s > mx) mx = s; }
+            return mx > 0 ? 60 / mx : 0;
+        }
         default:
             if (frameData && field in frameData) return frameData[field];
             if (field in cd) return cd[field];

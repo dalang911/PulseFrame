@@ -89,6 +89,44 @@ Derived in `fieldComputer.js`, added on top of the parsed values:
 | `Loss` | number | m | `computeGainLoss` — cumulative descent (same threshold) |
 | `azimuth` | number | ° | `computeAzimuth` — bearing to the next point, `0–359`, carried forward when two points coincide |
 
+Also added per frame by `computeDerivedFields()` — these exist so that every key
+Studio lets you bind is present in `rq` itself, not only inside the binding engine:
+
+| Field | Type | Unit | Definition |
+|---|---|---|---|
+| `elapsedMin` | number | min | `sec / 60` |
+| `avgSpeed` | number | km/h | `distance · 3.6 / sec` since the start (not a rolling average) |
+| `avgPace` | string \| number | mm:ss/km | `speedToPace(avgSpeed)`; the literal number `0` when `avgSpeed` is 0, matching the engine |
+| `remainDistance` | number | m | `totalDistance − distance`, clamped at 0 |
+| `remainKm` | number | km | `remainDistance / 1000` |
+| `relAltitude` | number | m | `altitude − baseAltitude` (base = first point) |
+| `hrPct` | number | 0..1 | `heart_rate / user_heartRateMax` (the rounded-up cap), 0 without a cap |
+| `elapsedTime` | string | — | `sec` as `m:ss`, or `h:mm:ss` past an hour |
+| `remainTime` | string | — | `remainDistance` extrapolated at the current average speed; `0:00` before any distance |
+
+Whole-activity quantities land on `chartData` (so on `rq._chartData`) rather than
+being repeated on every frame: `totalDistance`, `totalKm`, `duration`, `totalTime`,
+`paceBoundMin` and `paceBoundMax`. The last two are **pace** bounds in min/km —
+`paceMin`/`paceMax` stay speed extremes in km/h, and pace is their reciprocal, so
+`paceBoundMin` is the *slowest* pace (60 / slowest speed, the larger number) and
+`paceBoundMax` the *fastest*. A pace gauge binds them in that order on purpose:
+`normalize()` accepts `min > max` and returns the intuitive "faster = fuller"
+ramp, but it returns 0 when `min === max`, so the two bounds must never collapse
+onto each other. They used to: `computeChartPoints` counts zero-speed samples, so
+any activity with a start, stop or pause has `paceMin === 0` and takes the
+per-frame fallback scan — and that scan was reading the *maximum* speed for
+`paceBoundMin`, i.e. the same number as `paceBoundMax`. The fallback now skips
+zero speeds and scans the minimum, in both engines and in
+`computeDerivedFields`; `tools/field-parity.html` asserts the direction on three
+fixture shapes.
+
+Values materialised here are rounded for readability (2 decimals, 4 for `hrPct`);
+bindings do **not** read them — `bindingEngine.fieldValue()` recomputes the same
+expressions unrounded, so the rendered result is identical either way. Those
+expressions are shared with `studio/js/runtime/bindingEngine.js` and must stay
+byte-for-byte equivalent: after touching either engine, run
+[`tools/field-parity.html`](../tools/field-parity.html) on a static server.
+
 Mind the capitalisation: `Gain` / `Loss` are uppercase because the original
 device exports used those names. `DATA_FIELDS.TRKPT` in `constants.js` is the
 authoritative spelling list; prefer it over literals.

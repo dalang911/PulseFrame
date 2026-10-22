@@ -46,7 +46,17 @@ export const DATA_FIELDS = {
         SLOPE: 'slope',
         GAIN: 'Gain',
         LOSS: 'Loss',
-        AZIMUTH: 'azimuth'
+        AZIMUTH: 'azimuth',
+        // 以下由 fieldComputer.computeDerivedFields 物化，键名与 Studio fieldCatalog 一致
+        ELAPSED_MIN: 'elapsedMin',
+        AVG_SPEED: 'avgSpeed',
+        AVG_PACE: 'avgPace',
+        REMAIN_DISTANCE: 'remainDistance',
+        REMAIN_KM: 'remainKm',
+        REL_ALTITUDE: 'relAltitude',
+        HR_PCT: 'hrPct',
+        ELAPSED_TIME: 'elapsedTime',
+        REMAIN_TIME: 'remainTime'
     },
     // 摘要字段
     SUMMARY: {

@@ -5,9 +5,25 @@
  *   - 累计爬升 (Gain) / 累计下降 (Loss)
  *   - 方位角 (azimuth)
  *   - 图表坐标映射（心率/步频/配速/高程/功率的画布坐标）
+ *   - Studio 可绑定、但原始文件里没有的派生量（computeDerivedFields）
  */
 
 import { mapToRange, douglasPeucker } from '../utils/math.js';
+import { speedToPace } from '../utils/format.js';
+
+/** 秒 → 时钟字符串：<1h 为 m:ss，否则 h:mm:ss（与两处 bindingEngine 的实现一致） */
+function fmtClock(total) {
+    total = Math.max(0, Math.round(total || 0));
+    const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+    const p = (n) => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`;
+}
+
+/** 保留有效位，避免把长浮点写进逐秒轨迹点 */
+const round = (value, digits) => {
+    const f = 10 ** digits;
+    return Math.round((Number(value) || 0) * f) / f;
+};
 
 /**
  * 计算坡度（slope）
@@ -274,6 +290,76 @@ export function computeChartPoints(trkpt) {
 }
 
 /**
+ * 把 Studio 里可绑定、原始文件却不直接提供的派生量**物化**进轨迹点，
+ * 让它们成为 rq 的一部分（控制台 __trkptData、导出 JSON、第三方组件都能读）。
+ *
+ * 公式与 studio/js/runtime/bindingEngine.js 的 fieldValue 严格一致；绑定走的仍是
+ * 引擎现算（switch 分支优先于轨迹点同名字段），所以物化值这里的四舍五入不会改变
+ * 渲染结果，只影响直接读取 rq 的场景。两边都跑同一个 tools/field-parity.html。
+ *
+ * 只物化"某个轨迹点自己就能算出来"的量；全程量（总距离、总时长、配速边界）
+ * 返回给调用方合并进 chartData，不逐点重复存。
+ *
+ * 必须在 interpolatePoints 之后调用：插值只懂原始字段，逐秒新点不该由它生成派生值。
+ *
+ * @param {Array} trkpt - 已插值的轨迹点（原地写入新字段）
+ * @param {Object} chartData - computeChartPoints 的输出，提供 baseAltitude / 极值
+ * @returns {Object} 需要合并进 chartData 的全程量
+ */
+export function computeDerivedFields(trkpt, chartData = {}) {
+    const empty = {
+        totalDistance: 0, totalKm: 0, duration: 0, totalTime: fmtClock(0),
+        paceBoundMin: 0, paceBoundMax: 0,
+    };
+    if (!Array.isArray(trkpt) || trkpt.length === 0) return empty;
+
+    const lastPt = trkpt[trkpt.length - 1];
+    const totalDistance = lastPt.distance || 0;
+    const duration = lastPt.sec || 0;
+    const baseAltitude = chartData.baseAltitude || 0;
+    const hrCap = chartData.user_heartRateMax || chartData.heartRateMax || 0;
+
+    // 配速边界：chartData.paceMin/paceMax 是**速度**极值(km/h)，配速取其倒数。
+    // 极值缺失时退回逐帧扫描（扫描跳过 0 速度点）；不改写 paceMin/paceMax 本身的语义。
+    // 注意：computeChartPoints 把 0 速度也计入极值，所以起步/暂停过的活动 paceMin 恒为 0，
+    // 一定走扫描分支——这里必须与 bindingEngine 的 paceBound* 取同一个方向，
+    // 否则最慢/最快两个边界会相等，配速仪表归一化后整条为 0。
+    const scanSpeed = (wantMax) => {
+        let picked = wantMax ? 0 : Infinity;
+        for (let i = 0; i < trkpt.length; i++) {
+            const s = +trkpt[i].speed || 0;
+            if (wantMax) { if (s > picked) picked = s; }
+            else if (s > 0 && s < picked) picked = s;
+        }
+        return picked > 0 && picked < Infinity ? 60 / picked : 0;
+    };
+    const spdMin = +(chartData.paceMin || 0);
+    const spdMax = +(chartData.paceMax || 0);
+    const paceBoundMin = spdMin > 0 ? 60 / spdMin : scanSpeed(false);  // 最慢配速 = 60 / 最小速度
+    const paceBoundMax = spdMax > 0 ? 60 / spdMax : scanSpeed(true);   // 最快配速 = 60 / 最大速度
+
+    trkpt.forEach((p) => {
+        const sec = p.sec || 0;
+        const dist = p.distance || 0;
+        const avgSpeed = sec > 0 ? dist * 3.6 / sec : 0;              // m, s → km/h
+        const remainDistance = Math.max(0, totalDistance - dist);
+
+        p.elapsedMin = round(sec / 60, 2);
+        p.avgSpeed = round(avgSpeed, 2);
+        p.avgPace = avgSpeed > 0 ? speedToPace(avgSpeed) : 0;         // 与引擎一致：无配速时是数字 0
+        p.remainDistance = round(remainDistance, 2);
+        p.remainKm = round(remainDistance / 1000, 3);
+        p.relAltitude = round((p.altitude || 0) - baseAltitude, 2);
+        p.hrPct = hrCap > 0 ? round((p.heart_rate || 0) / hrCap, 4) : 0;
+        p.elapsedTime = fmtClock(sec);
+        // 预估剩余：按当前平均速度外推，距离或时间不足时给 0:00
+        p.remainTime = (dist > 0 && remainDistance > 0) ? fmtClock(remainDistance * sec / dist) : fmtClock(0);
+    });
+
+    return { totalDistance: round(totalDistance, 2), totalKm: round(totalDistance / 1000, 3), duration, totalTime: fmtClock(duration), paceBoundMin: round(paceBoundMin, 2), paceBoundMax: round(paceBoundMax, 2) };
+}
+
+/**
  * 一次性计算所有补齐字段
  * @param {Object} data - rq 数据结构
  * @returns {Object} 图表坐标数据
@@ -286,7 +372,8 @@ export function computeAllFields(data) {
     computeAzimuth(trkpt);
 
     const chartData = computeChartPoints(trkpt);
+    const derivedGlobals = computeDerivedFields(trkpt, chartData);
     const mapPoints = computeMapPoints(trkpt);
 
-    return { ...chartData, mapPoints };
+    return { ...chartData, ...derivedGlobals, mapPoints };
 }

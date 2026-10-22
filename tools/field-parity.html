@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PulseFrame · Field Parity Check</title>
+<style>
+    :root { color-scheme: light dark; }
+    body { font: 14px/1.5 ui-monospace, "Cascadia Mono", Consolas, monospace; margin: 0; padding: 24px; background: #f6f7f9; color: #16181d; }
+    h1 { font-size: 17px; margin: 0 0 4px; }
+    .sub { color: #6a7280; margin-bottom: 18px; }
+    #banner { padding: 12px 16px; border-radius: 8px; font-weight: 700; margin-bottom: 18px; }
+    #banner.pass { background: #e6f6ea; color: #177245; border: 1px solid #b7e0c4; }
+    #banner.fail { background: #fdecec; color: #b3261e; border: 1px solid #f3c1be; }
+    table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eceef1; vertical-align: top; }
+    th { background: #f0f2f5; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    tr.bad td { background: #fff5f5; }
+    .field { font-weight: 700; }
+    .ctx { color: #6a7280; font-size: 12px; }
+    .diff { color: #b3261e; }
+    section { margin-top: 26px; }
+    h2 { font-size: 14px; margin: 0 0 8px; }
+    .note { color: #6a7280; font-size: 12px; margin-top: 14px; }
+    code { background: #eceef1; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>Field parity — 前端编辑器 ↔ Studio</h1>
+<div class="sub">
+    比对 <code>js/components/visual/bindingEngine.js</code> 与
+    <code>studio/js/runtime/bindingEngine.js</code> 的 <code>fieldValue()</code>，
+    并检查 <code>studio/js/fieldCatalog.js</code> 里每个可绑定字段在前端都能解析出值。
+    两边是刻意各留一份副本的（Studio 目录要能独立运行），所以漂移只能靠这个页面拦。
+</div>
+<div id="banner">运行中…</div>
+<section>
+    <h2>逐字段结果（仅列出不一致项，全通过时此处为空）</h2>
+    <table id="diffTable">
+        <thead><tr><th>字段</th><th>用例</th><th class="num">前端</th><th class="num">Studio</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</section>
+<section>
+    <h2>目录覆盖</h2>
+    <div id="coverage"></div>
+</section>
+<section>
+    <h2>物化检查</h2>
+    <div id="materialized"></div>
+</section>
+<section>
+    <h2>配速边界方向</h2>
+    <div id="bounds"></div>
+</section>
+<div class="note">
+    用法：静态服务器根目录下打开 <code>/tools/field-parity.html</code>（ES 模块不能走 <code>file://</code>）。
+    改动任一 bindingEngine、fieldComputer 或 fieldCatalog 后都要跑一次。
+</div>
+
+<script type="module">
+import { fieldValue as feValue } from '../js/components/visual/bindingEngine.js';
+import { fieldValue as stValue } from '../studio/js/runtime/bindingEngine.js';
+import { FIELDS } from '../studio/js/fieldCatalog.js';
+import { computeDerivedFields } from '../js/data/fieldComputer.js';
+
+const show = (v) => typeof v === 'number' ? String(Math.round(v * 1e6) / 1e6) : JSON.stringify(v);
+
+// ===== 用例：覆盖 0 秒、暂停、末点、以及缺失极值的旧数据 =====
+// fixtures 带齐 TRKPT_FIELDS 的全部键，否则目录覆盖检查会把"样例数据里恰好没有"
+// 的字段（slope/Gain/Loss/azimuth）误报成前端算不出来。
+const trk = [
+    { sec: 0,    timestamp: 1700000000, distance: 0,    speed: 0,  altitude: 480, heart_rate: 92,  cadence: 160, power: 0,   step_length: 1.05, slope: 0,    Gain: 0,    Loss: 0,   azimuth: 90,  is_pause: false },
+    { sec: 900,  timestamp: 1700000900, distance: 2500, speed: 12, altitude: 500, heart_rate: 165, cadence: 178, power: 240, step_length: 1.18, slope: 0.08, Gain: 20,   Loss: 5,   azimuth: 120, is_pause: false },
+    { sec: 2000, timestamp: 1700002000, distance: 5000, speed: 6,  altitude: 520, heart_rate: 150, cadence: 172, power: 180, step_length: 0.96, slope: -0.03, Gain: 40.5, Loss: 12.5, azimuth: 65,  is_pause: true },
+];
+const chartFull = {
+    baseAltitude: 480, user_heartRateMax: 190, heartRateMax: 180, heartRateMin: 92,
+    paceMin: 6, paceMax: 12, powerMin: 60, powerMax: 240,
+    cadenceMin: 150, cadenceMax: 180, eleMin: 470, eleMax: 530,
+};
+// 真实数据里的常态：computeChartPoints 把 0 速度点也计入极值，起步/暂停过一次的
+// 活动 paceMin 恒为 0，paceBoundMin 因此必须走扫描分支且取「最小非零速度」。
+const cdPaceMinZero = { ...chartFull, paceMin: 0 };
+
+const cases = [
+    { name: '起点 sec=0',      frame: trk[0], ctx: { trkptData: trk, chartData: chartFull }, progress: 0 },
+    { name: '途中帧',          frame: trk[1], ctx: { trkptData: trk, chartData: chartFull }, progress: 0.45 },
+    { name: '末点 remain=0',   frame: trk[2], ctx: { trkptData: trk, chartData: chartFull }, progress: 1 },
+    { name: 'paceMin=0（真实数据）', frame: trk[1], ctx: { trkptData: trk, chartData: cdPaceMinZero }, progress: 0.5 },
+    { name: '旧数据无 chartData', frame: trk[1], ctx: { trkptData: trk, chartData: {} },     progress: 0.5 },
+    { name: '空 trkpt + 空 cd', frame: trk[1], ctx: { trkptData: [], chartData: {} },         progress: 0.5 },
+    { name: 'ctx 为 undefined', frame: trk[1], ctx: undefined,                                 progress: undefined },
+];
+
+const keys = [...new Set([...FIELDS.map(f => f.key), 'speed', 'distance', 'altitude', 'heart_rate', 'cadence', 'power', 'slope', 'Gain', 'Loss', 'azimuth', 'timestamp', 'is_pause'])];
+
+const diffs = [];
+for (const c of cases) {
+    for (const key of keys) {
+        let a, b;
+        try { a = feValue(key, c.frame, c.ctx, c.progress); } catch (e) { a = 'THROW: ' + e.message; }
+        try { b = stValue(key, c.frame, c.ctx, c.progress); } catch (e) { b = 'THROW: ' + e.message; }
+        if (show(a) !== show(b)) diffs.push({ key, case: c.name, frontend: show(a), studio: show(b) });
+    }
+}
+
+// ===== 物化：computeDerivedFields 写进 trkpt 的键必须与目录同名，且引擎分支优先 =====
+const pts = trk.map(p => ({ ...p }));
+const globals = computeDerivedFields(pts, chartFull);
+const perPointKeys = ['elapsedMin', 'avgSpeed', 'avgPace', 'remainDistance', 'remainKm', 'relAltitude', 'hrPct', 'elapsedTime', 'remainTime'];
+const globalKeys = ['totalDistance', 'totalKm', 'duration', 'totalTime', 'paceBoundMin', 'paceBoundMax'];
+const missingOnPoints = perPointKeys.filter(k => !(k in pts[1]));
+const missingGlobals = globalKeys.filter(k => !(k in globals));
+
+// ===== 目录覆盖：Studio 里能选的字段，两个引擎都必须解得出值 =====
+// 判定用“主用例里前后端都恒为 0”——fixture 已经把每个极值都喂成非 0，
+// 所以真为 0 的只可能是键拼错、分支被删或字段根本没进数据链路。
+const mainCases = cases.slice(0, 3);
+const unresolved = FIELDS.filter(f => mainCases.every(c => {
+    const a = feValue(f.key, c.frame, c.ctx, c.progress);
+    const b = stValue(f.key, c.frame, c.ctx, c.progress);
+    return a === 0 && b === 0;
+})).map(f => f.key);
+
+// ===== 配速边界方向 =====
+// paceBoundMin = 最慢配速（数值最大），paceBoundMax = 最快配速（数值最小）。
+// gauge 用 min=paceBoundMin / max=paceBoundMax 绑 pace 字段，normalize 允许 min>max
+// （反向归一，越快越满），但绝不允许二者相等——max===min 时 normalize 直接返回 0，
+// 整条配速表一动不动。历史坑就出在扫描分支取反了方向，且真实数据 paceMin 恒为 0
+// （0 速度点被计入极值），所以每次都会踩到那条分支。
+const r2 = (v) => Math.round(v * 100) / 100;
+const boundCases = [
+    { name: 'chartData 带速度极值', cd: chartFull },
+    { name: 'paceMin 被 0 速点拉成 0', cd: cdPaceMinZero },
+    { name: '无 chartData（纯扫描）', cd: {} },
+];
+const boundRows = [];
+const boundProblems = [];
+for (const bc of boundCases) {
+    const ctx = { trkptData: trk, chartData: bc.cd };
+    const slowFE = feValue('paceBoundMin', trk[1], ctx, 0.5);
+    const slowST = stValue('paceBoundMin', trk[1], ctx, 0.5);
+    const fastFE = feValue('paceBoundMax', trk[1], ctx, 0.5);
+    const fastST = stValue('paceBoundMax', trk[1], ctx, 0.5);
+    const mat = computeDerivedFields(trk.map(p => ({ ...p })), bc.cd);
+    boundRows.push({ name: bc.name, slow: show(slowFE), fast: show(fastFE), matSlow: show(mat.paceBoundMin), matFast: show(mat.paceBoundMax) });
+    if (show(slowFE) !== show(slowST) || show(fastFE) !== show(fastST))
+        boundProblems.push(`${bc.name}：两个引擎的配速边界不一致`);
+    if (!(slowFE > fastFE))
+        boundProblems.push(`${bc.name}：最慢配速 ${show(slowFE)} 未大于最快配速 ${show(fastFE)}，配速仪表会归 0`);
+    if (r2(slowFE) !== r2(mat.paceBoundMin) || r2(fastFE) !== r2(mat.paceBoundMax))
+        boundProblems.push(`${bc.name}：物化边界 ${show(mat.paceBoundMin)}/${show(mat.paceBoundMax)} 与引擎 ${show(slowFE)}/${show(fastFE)} 不同`);
+}
+
+const banner = document.getElementById('banner');
+const tbody = document.querySelector('#diffTable tbody');
+diffs.forEach(d => {
+    const tr = document.createElement('tr');
+    tr.className = 'bad';
+    tr.innerHTML = `<td class="field">${d.key}</td><td class="ctx">${d.case}</td><td class="num diff">${d.frontend}</td><td class="num">${d.studio}</td>`;
+    tbody.appendChild(tr);
+});
+
+const problems = [...diffs.map(d => `引擎不一致：${d.key}（${d.case}）`),
+    ...missingOnPoints.map(k => `未物化到 trkpt：${k}`),
+    ...missingGlobals.map(k => `未写入 chartData：${k}`),
+    ...unresolved.map(k => `目录字段前端恒为 0：${k}`),
+    ...boundProblems];
+
+banner.className = problems.length ? 'fail' : 'pass';
+banner.textContent = problems.length
+    ? `FAIL — ${problems.length} 个问题（共 ${keys.length * cases.length} 次引擎比对）`
+    : `PASS — ${keys.length} 个字段 × ${cases.length} 个用例全部一致，目录字段均可解析，派生量已物化`;
+
+document.getElementById('coverage').innerHTML =
+    `目录字段 <b>${FIELDS.length}</b> 个 · 引擎比对 <b>${keys.length * cases.length}</b> 次 · ` +
+    `前端恒为 0 的目录字段：<b>${unresolved.length ? unresolved.join(', ') : '无'}</b>`;
+document.getElementById('materialized').innerHTML =
+    `逐点物化 <b>${perPointKeys.length}</b> 个，缺失：<b>${missingOnPoints.join(', ') || '无'}</b><br>` +
+    `全程量 <b>${globalKeys.length}</b> 个，缺失：<b>${missingGlobals.join(', ') || '无'}</b><br>` +
+    `<span class="ctx">样例帧 elapsedMin=${show(pts[1].elapsedMin)} avgSpeed=${show(pts[1].avgSpeed)} avgPace=${show(pts[1].avgPace)} ` +
+    `remainKm=${show(pts[1].remainKm)} relAltitude=${show(pts[1].relAltitude)} hrPct=${show(pts[1].hrPct)} remainTime=${show(pts[1].remainTime)}</span>`;
+document.getElementById('bounds').innerHTML =
+    `<table><thead><tr><th>场景</th><th class="num">最慢配速 paceBoundMin</th><th class="num">最快配速 paceBoundMax</th>` +
+    `<th class="num">物化 Min/Max</th></tr></thead><tbody>` +
+    boundRows.map(r => `<tr><td class="ctx">${r.name}</td>` +
+        `<td class="num">${r.slow}</td><td class="num">${r.fast}</td><td class="num">${r.matSlow} / ${r.matFast}</td></tr>`).join('') +
+    `</tbody></table>` +
+    (boundProblems.length ? `<div class="diff">${boundProblems.join('<br>')}</div>`
+        : `<span class="ctx">三个场景下 最慢 &gt; 最快，且引擎与物化同值 ✓</span>`);
+</script>
+</body>
+</html>

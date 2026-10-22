@@ -130,7 +130,7 @@ usable data. Stages, in order:
 | detect + parse | `parsers/index.js` → `gpxToRq` / `tcxToRq` / `fitToRq` / `jsonToRq` | any supported file → the unified `rq` structure | `DATA_PARSED` |
 | validate | `data/DataSchema.js` → `validateRq(rq)` | returns `{ valid, errors }`; invalid input throws instead of rendering nonsense | — |
 | interpolate | `data/interpolator.js` → `interpolatePoints(rq)` | rewrites `rq.data.trkpt` **in place** to exactly one point per second; `formatValue()` rounds each field to its sensible precision | `DATA_INTERPOLATED` |
-| derive | `data/fieldComputer.js` → `computeAllFields(rq)` | `computeSlope`, `computeGainLoss`, `computeAzimuth` mutate the points; `computeChartPoints` and `computeMapPoints` return the geometry | `DATA_COMPUTED` |
+| derive | `data/fieldComputer.js` → `computeAllFields(rq)` | `computeSlope`, `computeGainLoss`, `computeAzimuth` mutate the points; `computeDerivedFields` materialises the Studio-bindable derived keys onto each frame and returns the whole-activity quantities (`totalKm`, `duration`, `totalTime`, `paceBoundMin/Max`) that merge into `chartData`; `computeChartPoints` and `computeMapPoints` return the geometry | `DATA_COMPUTED` |
 | ready | — | attaches `rq._chartData` / `rq._mapPoints` | `DATA_READY` |
 
 Because `interpolatePoints` mutates in place, `DataPipeline` takes a debug

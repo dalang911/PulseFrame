@@ -55,20 +55,23 @@ export function fieldValue(field, frameData, ctx, progress) {
         //    配速与其互为倒数：最慢配速=60/最小速度，最快配速=60/最大速度。
         //    另设 paceBoundMin/paceBoundMax 字段引用供 gauge 绑 pace 字段作 min/max；
         //    不改写 paceMin/paceMax 本身（速度仪表绑定依赖其原始 km/h 语义）；
-        //    若无速度极值（旧 demo 数据）退回逐帧扫描实时现算。——
-        case 'paceBoundMin': {
+        //    若无速度极值则退回逐帧扫描，扫描时必须跳过 0 速度点——起步/暂停/结尾必然有 0，
+        //    而 computeChartPoints 的 paceMin 正是被这些 0 拉成 0 才走到扫描分支的。
+        //    若扫描取最大速度当 paceBoundMin，它会和 paceBoundMax 算成同一个数，
+        //    gauge 的 normalize 遇到 max===min 直接返回 0，配速表整条恒空。——
+        case 'paceBoundMin': {                                  // 最慢配速 = 60 / 最小速度
             const spd = +(cd.paceMin || 0);
+            if (spd > 0) return 60 / spd;
+            let mn = Infinity;
+            for (let i = 0; i < trk.length; i++) { const s = +trk[i].speed || 0; if (s > 0 && s < mn) mn = s; }
+            return mn < Infinity ? 60 / mn : 0;
+        }
+        case 'paceBoundMax': {                                 // 最快配速 = 60 / 最大速度
+            const spd = +(cd.paceMax || 0);
             if (spd > 0) return 60 / spd;
             let mx = 0;
             for (let i = 0; i < trk.length; i++) { const s = +trk[i].speed || 0; if (s > mx) mx = s; }
             return mx > 0 ? 60 / mx : 0;
-        }
-        case 'paceBoundMax': {
-            const spd = +(cd.paceMax || 0);
-            if (spd > 0) return 60 / spd;
-            let mn = Infinity;
-            for (let i = 0; i < trk.length; i++) { const s = +trk[i].speed || 0; if (s > 0 && s < mn) mn = s; }
-            return mn > 0 && mn < Infinity ? 60 / mn : 0;
         }
         default:
             if (frameData && field in frameData) return frameData[field];
