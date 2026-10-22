@@ -16,6 +16,32 @@ const { Box } = window.LeaferUI;
 const _removedComponentsCache = new Map();
 
 /**
+ * 面板边框宽度取哪个配置键。
+ * strokeWidth 在历史上被当成两种用途：
+ *   - Box 自己的描边宽度（数字，如 web 地图的边框）；
+ *   - 图表组件内部的「{ruler, line, progress} 线宽」对象。
+ * 对象传给 Leafer Box 没有意义，还会让新加的「Border width」设置项失效，
+ * 所以数字照旧，不是数字时改读 borderWidth（图表用这个键）。
+ */
+function panelBorderWidth(config) {
+    if (typeof config.strokeWidth === 'number') return config.strokeWidth;
+    return typeof config.borderWidth === 'number' ? config.borderWidth : undefined;
+}
+
+/**
+ * 把面板边框宽度同步到 Box。
+ * rebuildBoxChildren 只重建子元素、不碰 Box 属性，而 borderWidth 不属于
+ * LAYOUT_KEYS（改它必然走重建），所以重建后要补这一句，否则得刷新页面才生效。
+ * @param {Box} box
+ * @param {Object} config
+ */
+export function syncPanelBorderWidth(box, config) {
+    const bw = panelBorderWidth(config || {});
+    // 没有数字边框宽度时不动 Box： Leafer 的 strokeWidth 有默认值，硬写 undefined 反而可能改掉现状
+    if (typeof bw === 'number') box.strokeWidth = bw;
+}
+
+/**
  * 根据组件定义创建一个 Leafer Box 实例
  * @param {string} componentId - 组件注册 ID
  * @param {Object} [configOverrides] - 配置覆盖（位置/颜色等）
@@ -64,7 +90,7 @@ export function createComponent(componentId, configOverrides = {}) {
         hitBox: true,
         cornerRadius: config.cornerRadius || 0,
         stroke: config.stroke,       // Box 级描边（web 地图外圈，无则不设）
-        strokeWidth: config.strokeWidth,
+        strokeWidth: panelBorderWidth(config),  // 见 panelBorderWidth 注释：数字才算边框宽度
         overflow: config.overflow,   // 'hide' 时子元素随圆角裁剪（圆形地图）
         resizeChildren: true,
         children: children

@@ -149,6 +149,10 @@ export default {
 };
 ```
 
+布局同构的组件可以把 `settings/build/update` 收敛到一个公共模块，定义文件只留各自的差异点：
+心率图、配速图、高程图都只剩一份 `OPTS`，实现全在 `definitions/chartCommon.js`，
+新增配置项时三块面板一次对齐，不会各自漂移。
+
 ### 组件生命周期
 1. **注册** → `registry.register(definition)`
 2. **创建** → `factory.createComponent(id, configOverrides)` → 调用 `definition.build()`

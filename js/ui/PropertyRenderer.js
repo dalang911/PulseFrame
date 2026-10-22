@@ -13,6 +13,7 @@
 import { openUnitConfigDialog } from './UnitConfigDialog.js';
 import { loadAndApplyFont } from '../core/GlobalFont.js';
 import { imageToSquareDataUrl, presetNameOf } from '../utils/images.js';
+import { syncPanelBorderWidth } from '../components/factory.js';
 
 // 预定义颜色（与原版一致）
 export const PRESET_COLORS = [
@@ -573,6 +574,9 @@ export function rebuildBoxChildren(box, definition, config, data, updateFn, curr
             if (typeof box.resizeHeight === 'function') box.resizeHeight(targetH);
             else box.height = targetH;
         }
+
+        // 面板边框宽度挂在 Box 上而不是子元素上，重建不碰 Box，得单独同步一次
+        syncPanelBorderWidth(box, config);
 
         // 刷新当前帧数据
         if (currentFrame != null && typeof updateFn === 'function') {

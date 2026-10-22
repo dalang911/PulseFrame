@@ -147,7 +147,7 @@ Details of the resulting structure are in [DATA_SCHEMA.md](DATA_SCHEMA.md).
 | `registry.js` | `register(def)`, `registerAll(defs)`, `get(id)`, `has(id)`, `getAll()`, `getByCategory(cat)`, `getCategories()`, `getIds()` |
 | `factory.js` | `createComponent(id, overrides)` → Leafer children; `addComponentToCanvas`, `removeComponentFromCanvas`, `clearAllComponents`, `initBackgroundLayer`, `resizeBackground` |
 | `updater.js` | `updateAllComponents(frame, updateMemory)`, `updateComponent(id, frame)` |
-| `definitions/` | one file per component, or a group exported as an array (`gaugePanels.js`, `lapPanels.js`, …) registered through `definitions/index.js` |
+| `definitions/` | one file per component, or a group exported as an array (`gaugePanels.js`, `lapPanels.js`, …) registered through `definitions/index.js`; siblings that differ only in a few constants can share a helper module (`chartCommon.js` supplies the settings list, `build()` and `update()` for all three line charts) |
 | `visual/` | components authored in Studio: JSON specs rather than code |
 | `visual/loader.js` | `loadLocalComponents()` (browser storage, ids prefixed `studio_comp_`), `loadRemoteComponents()` (store), `loadCustomComponents()` (both) |
 

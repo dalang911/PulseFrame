@@ -187,17 +187,27 @@ must come from the parameters or from `box` itself. Config lives on
 ```js
 update(box, frameData, progress, ctx) {
     const children = box.children;
-    if (!children || children.length < 3) return;          // build changed? fail quiet
+    if (!children || !children.length) return;             // build changed? fail quiet
 
+    const byName = n => children.find(c => c && c.name === n);
     const speed = frameData.speed || 0;
     const ratio = Math.min(1, Math.max(0,
         (speed - box.__leaferConfig.minValue) /
         (box.__leaferConfig.maxValue - box.__leaferConfig.minValue || 1)));
 
-    children[1].rotation = ratio * 270 - 135;
-    children[2].text = speed.toFixed(1);
+    const needle = byName('needle');
+    if (needle) needle.rotation = ratio * 270 - 135;
+    const readout = byName('readout');
+    if (readout) readout.text = speed.toFixed(1);
 }
 ```
+
+Look children up by `name`, not by index, whenever any of them can be missing. A
+layer toggle is implemented by not emitting that child (see §5), so indices shift
+underneath you; `name` survives. `lapPanels.js` and the three chart components in
+`chartCommon.js` already do this. When every child is unconditional and the order is
+part of the component's contract (the map panels: 0 = route, 1 = progress, 2 = current
+position …), indexing is fine — but then say so in a comment above `build()`.
 
 If you need pixel positions on a resized component, scale them — the children were
 built in default geometry, so multiply by `resizeScale(box, defW, defH)` from
@@ -212,7 +222,9 @@ wrong and the component only looks right at its default dimensions.
 
 Cost matters: `update()` runs once **per frame per component**, twice when the
 memory canvas is active, thousands of times during one export. No sorting, no
-regex compilation, no `new` arrays per call — precompute in `build()` and index.
+regex compilation, no `new` arrays per call — precompute in `build()`. Scanning
+`children` with a couple of `find()` calls is fine (the list is single digits); if a
+component really needs per-frame indexing, cache it and invalidate on rebuild.
 
 Errors are caught and logged per component, so a throwing `update()` degrades that
 one component instead of killing the render. Do not rely on that: guard explicitly,
@@ -238,8 +250,15 @@ reload. See [COMPONENT_JSON_SPEC.md](COMPONENT_JSON_SPEC.md).
 
 **Consequence:** if you add a field to `defaultConfig`, existing saved templates
 still load — they simply do not have that key. Provide a sane fallback wherever you
-read it (`config.showTicks !== false`, not `config.showTicks`). Never reorder
-children: positional `customProps` keys and `children[i]` lookups both break.
+read it (`config.showTicks !== false`, not `config.showTicks`), and make that fallback
+equal whatever value used to be hardcoded, so an old template renders identical.
+Layer toggles obey the same rule: default to on, so the child list built without any
+of the new keys is exactly the list the component used to build.
+
+Do not reorder children — `build()` output order is paint order (children later in
+the list draw on top, which is why the area fill sits just before the curve in
+`chartCommon.js`), and `children[i]` lookups in `update()` break the moment a layer
+is switched off.
 
 ## 6. Categories
 
@@ -252,7 +271,7 @@ component is not orphaned in a new group:
 | `time` | clock and date blocks | `appv_date_pan`, `text_time_pan` |
 | `distance` | distance bars, rulers, arcs, gauges | `lite_distance_pan`, `zs8_distance_pan`, `el_speed_pan` |
 | `attr` | attribution/brand plates | small info plates |
-| `chart` | time-series charts | `pt_heart_pan`, `pt_pace_pan`, `pt_ele_pan` |
+| `chart` | time-series charts | `pt_heart_pan`, `pt_pace_pan`, `pt_ele_pan` — all three are thin option objects over `definitions/chartCommon.js` |
 | `map` | route and heading maps | `appv_map_pan`, `appv_map_a_pan` |
 | `text` | free labels | `text_day_pan`, `text_nowtime_pan` |
 

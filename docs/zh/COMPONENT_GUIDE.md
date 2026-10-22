@@ -177,6 +177,12 @@ const allDefinitions = [
 且不会重跑 `build()`。想改子元素属性的设置项必须另起键名（如 `routeCornerRadius`、
 `pointStrokeWidth`），否则改的是外层容器。
 
+反过来也有一坑：`strokeWidth` 是布局键，可图表类组件早就把它用作「内部线宽对象」
+（`{ruler, line, progress}`），所以面板边框宽度另起 `borderWidth`。它不属于布局键，
+改它会走 `rebuildBoxChildren()`，而重建只换子元素、不碰 Box 属性，因此
+`factory.js` 的 `syncPanelBorderWidth()` 会在重建后补一次同步（`createComponent()`
+创建 Box 时同样用它取宽度）。
+
 ### dataBindings 可用字段
 
 | 字段 | 说明 |
@@ -199,7 +205,7 @@ const allDefinitions = [
 |----------|------|------|
 | `background` | 背景画布 | 纯色/渐变/图片背景 |
 | `info` | 信息显示 | 日期时间、标题、综合信息 |
-| `chart` | 图表 | 心率图、配速图、高程图 |
+| `chart` | 图表 | 心率图、配速图、高程图（三者的布局与设置项共用 `definitions/chartCommon.js`） |
 | `gauge` | 仪表盘 | 速度表、心率表 |
 | `map` | 地图 | 路线图、GPS 轨迹 |
 | `table` | 表格 | 圈速表、数据表 |
@@ -208,9 +214,9 @@ const allDefinitions = [
 ## 注意事项
 
 1. **Leafer API**：使用 `window.LeaferUI` 命名空间，版本 2.2.11
-2. **子元素 ID**：需要在 `update()` 中动态修改的元素应设置 `id`
+2. **子元素标识**：需要在 `update()` 中动态修改的元素应设置 `name`（如 `metrics`、`now_dot`），用 `children.find(c => c.name === 'now_dot')` 取，比下标稳；图层开关会让下标整体平移
 3. **性能**：`update()` 每帧调用（10-30 FPS），避免复杂计算
 4. **缺失数据**：数据字段可能为 `null`（如运动无踏频），需做防御性处理
 5. **颜色格式**：优先 `#RRGGBB`；需要透明度时直接写 `rgba(r,g,b,a)` 或 `#RRGGBBAA`（Leafer 与颜色选择器都支持 alpha，所以组件不再单列「透明度」设置项）
 6. **缩放契约**：外层 Box 带 `resizeChildren`，改尺寸的那一刻 Leafer 会**就地**把每个子元素的 `points` / `x` / `y` / `width` / `height` 乘上 新尺寸÷旧尺寸。累计效果 = 当前尺寸÷设计尺寸，所以 `update()` 回写坐标要乘 `resizeScale(box, defW, defH)`，而 `build()` 里必须把 `data._chartData` 的数组复制一份再交给子元素（`points: mapPoints.slice()`）——否则 store 里的设计坐标会被改写，下一帧再乘一次就成了二次缩放，各层随之错位
-7. **子元素顺序**：`update()` 按下标取子元素，新增元素只能往后追加，不能插入或重排
+7. **子元素顺序**：`build()` 返回的顺序就是绘制顺序（后面的盖在前面的上面，所以高程图的面积填充排在曲线之前），顺序不能随意重排。图层开关靠「不生成这个子元素」实现（`lapPanels.js`、`chartCommon.js` 都是这样），默认全部开启时生成的列表要和加开关之前完全一致，老模板才像素不变；一旦有元素可能缺席，`update()` 就按 `name` 取，别按下标
