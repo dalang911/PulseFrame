@@ -156,6 +156,13 @@ Practical rules learned from the shipped components:
 - Use `data` (the whole `rq`) for anything static — totals, extremes, the point
   sets in `data._chartData`, the projected route in `data._mapPoints`. This is the
   only place you get the full series; `update()` sees one second.
+- **Never hand a `data._chartData` array straight to a child.** `Box.resizeChildren`
+  is not a wrapper transform: the moment the box is resized it multiplies every
+  child's `points` / `x` / `y` / `width` / `height` **in place**, and it keeps
+  mutating whatever array you handed it. So `points: chartData.mapPoints` rewrites
+  the store's own design coordinates, and the next `update()` — which multiplies by
+  `resizeScale()` — scales them a second time, and the layers drift apart. Copy at
+  the boundary: `points: mapPoints.slice()`.
 - Helper functions you will want: `plotInsets(W, H, padX, padY)` and
   `mapToRange()` from `js/utils/math.js`, the formatters in `js/utils/format.js`
   (`speedToPace`, `secondsToHHMMSS`, `metersToKm`, `timestampToDateString`).
@@ -195,6 +202,13 @@ update(box, frameData, progress, ctx) {
 If you need pixel positions on a resized component, scale them — the children were
 built in default geometry, so multiply by `resizeScale(box, defW, defH)` from
 `js/utils/math.js` (exactly what `heartChart.js` does for its progress marker).
+
+Both halves of that rule come from the same mechanism: a resize multiplies every
+child's geometry by `new ÷ old`, so the accumulated factor is exactly
+`current ÷ default` — which is what `resizeScale()` returns. Write design
+coordinates in `build()` (into an array you copied), write design × `resizeScale()`
+in `update()`, and the layers stay welded together at any size. Get either half
+wrong and the component only looks right at its default dimensions.
 
 Cost matters: `update()` runs once **per frame per component**, twice when the
 memory canvas is active, thousands of times during one export. No sorting, no

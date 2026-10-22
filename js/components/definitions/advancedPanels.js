@@ -148,7 +148,9 @@ const o2o_ele_pan = {
                 cornerRadius: 8, overflow: 'hide', resizeChildren: true,
                 children: [
                     {
-                        tag: 'Line', lockRatio: true, x: 200, y: 50, points: o2oPoints, curve: true,
+                        // slice()：Box.resizeChildren 会就地改写子元素 points，
+                        // 直接把 store 的 o2o_ele_points 交给它会污染原始设计坐标
+                        tag: 'Line', lockRatio: true, x: 200, y: 50, points: o2oPoints.slice(), curve: true,
                         strokeWidth: config.eleLineWidth || 3, stroke: config.eleLineColor || '#FFD700', strokeCap: 'round'
                     }
                 ]

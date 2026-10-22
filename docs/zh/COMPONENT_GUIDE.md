@@ -211,4 +211,6 @@ const allDefinitions = [
 2. **子元素 ID**：需要在 `update()` 中动态修改的元素应设置 `id`
 3. **性能**：`update()` 每帧调用（10-30 FPS），避免复杂计算
 4. **缺失数据**：数据字段可能为 `null`（如运动无踏频），需做防御性处理
-5. **颜色格式**：统一使用 `#RRGGBB` 格式
+5. **颜色格式**：优先 `#RRGGBB`；需要透明度时直接写 `rgba(r,g,b,a)` 或 `#RRGGBBAA`（Leafer 与颜色选择器都支持 alpha，所以组件不再单列「透明度」设置项）
+6. **缩放契约**：外层 Box 带 `resizeChildren`，改尺寸的那一刻 Leafer 会**就地**把每个子元素的 `points` / `x` / `y` / `width` / `height` 乘上 新尺寸÷旧尺寸。累计效果 = 当前尺寸÷设计尺寸，所以 `update()` 回写坐标要乘 `resizeScale(box, defW, defH)`，而 `build()` 里必须把 `data._chartData` 的数组复制一份再交给子元素（`points: mapPoints.slice()`）——否则 store 里的设计坐标会被改写，下一帧再乘一次就成了二次缩放，各层随之错位
+7. **子元素顺序**：`update()` 按下标取子元素，新增元素只能往后追加，不能插入或重排

@@ -198,7 +198,8 @@ const appv_ele18_pan = {
         const ele18Points = data?._chartData?.ele18_points || [];
         return [
             {
-                tag: 'Line', lockRatio: true, points: ele18Points, cornerRadius: 1,
+                // slice()：同 mapChildren，避免 Leafer 就地改写污染 store 里的设计坐标
+                tag: 'Line', lockRatio: true, points: ele18Points.slice(), cornerRadius: 1,
                 strokeWidth: config.lineWidth || 1, stroke: config.lineColor || '#FFFFFF', strokeCap: 'round'
             },
             { tag: 'Ellipse', lockRatio: true, around: 'center', width: 14, height: 14, fill: config.dotColor || '#FFCC00' }
@@ -226,7 +227,7 @@ const MAP_POINT_SIZE = 16;
 
 /**
  * 读数字设置：区分「这个键不存在（旧模板）」和「用户显式设成 0」
- * 不透明度尤其危险——旧模板缺键时若读成 0，整条路线会直接消失
+ * 例如圆角设成 0 是有效值，只有缺键时才回落到老款数值
  */
 function numOr(value, fallback) {
     if (value === null || value === undefined || value === '') return fallback;
@@ -234,12 +235,18 @@ function numOr(value, fallback) {
     return Number.isFinite(n) ? n : fallback;
 }
 
-const clamp01 = (v) => Math.max(0, Math.min(1, v));
-
 /**
  * 生成地图组件子元素
  * 下标顺序固定：0=背景路线 1=已走过路线 2=当前位置点 3=起点 4=终点，
  * mapUpdate 按 1/2 回写位置，将来新增元素只能往后追加。
+ *
+ * 缩放契约（改动前务必读）：
+ *   外层 Box 带 resizeChildren，Leafer 在每次改尺寸的那一刻「就地」把每个子元素的
+ *   points / x / y / width / height 乘上 新尺寸÷旧尺寸，累计效果 = 当前尺寸÷设计尺寸。
+ *   所以 update() 每帧回写坐标要乘 resizeScale（见 mapUpdate），
+ *   而 build() 绝不能把 store 里的数组直接交给子元素——那份设计坐标会被就地改写污染，
+ *   下一帧再乘一次缩放就成了二次缩放，背景线与行进线随之错位（本次修掉的即是此坑）。
+ *
  * @param {Object} config
  * @param {Object} data - rq（含 _chartData.mapPoints）
  * @param {Object} [opts]
@@ -251,11 +258,9 @@ function mapChildren(config, data, opts = {}) {
     const routeColor = config.routeColor || '#FFFF00';
     const progressColor = config.progressColor || '#FF7F00';
     const pointColor = config.pointColor || '#FF6347';
-    const routeOpacity = clamp01(numOr(config.routeOpacity, 1));
-    const progressOpacity = clamp01(numOr(config.progressOpacity, opts.arrow ? 0.7 : 1));
     // 老款：背景线圆角 4、进度线 6（固定比背景多 2），两种地图组件都一样
     const corner = Math.max(0, numOr(config.routeCornerRadius, 4));
-    // 老款箭头多边形长边就是 48 设计像素，默认值必须与它一致，否则 k=1 时尺寸会缩水
+    // 老款箭头多边形长边就是 48 设计像素，默认值必须与它一致，否则缩放比为 1 时尺寸会缩水
     const pointSize = Math.max(2, numOr(config.pointSize, opts.arrow ? 48 : MAP_POINT_SIZE));
     const pointStroke = config.pointStroke || '#FFFFFF';
     const pointStrokeWidth = Math.max(0, numOr(config.pointStrokeWidth, 0));
@@ -263,21 +268,23 @@ function mapChildren(config, data, opts = {}) {
 
     const children = [
         {
-            tag: 'Line', lockRatio: true, points: mapPoints,
+            // slice()：别把 store 的 mapPoints 交给 Leafer 就地改写（见函数头「缩放契约」）
+            tag: 'Line', lockRatio: true, points: mapPoints.slice(),
             cornerRadius: corner, strokeWidth: config.routeWidth || 4,
-            stroke: routeColor, strokeCap: 'round', opacity: routeOpacity
+            stroke: routeColor, strokeCap: 'round'
         },
         {
             name: 'now_map', tag: 'Line', lockRatio: true, points: [],
             cornerRadius: corner + 2, strokeWidth: config.progressWidth || 6,
-            stroke: progressColor, strokeCap: 'round', opacity: progressOpacity
+            stroke: progressColor, strokeCap: 'round'
         }
     ];
 
     // 当前位置：自定义图标（只有 Map Route 打开开关才生效）> 方向箭头 > 圆点
+    // 无边框时干脆不写 strokeWidth，保持与老款完全一致的属性集合
     const border = pointStrokeWidth > 0
         ? { stroke: pointStroke, strokeWidth: pointStrokeWidth }
-        : { strokeWidth: 0 };
+        : {};
     if (useIcon) {
         children.push({
             name: 'now_point', tag: 'Image', lockRatio: true, around: 'center',
@@ -319,6 +326,7 @@ function mapChildren(config, data, opts = {}) {
 
 /**
  * 地图组件设置项
+ * 线路透明度不单列设置项：颜色选择器自带 alpha（rgba 描边），再放一个滑块只会重复
  * @param {Object} opts - 面板回显默认值（build 侧另有兜底，两处需保持一致）
  * @param {Array} extra - 组件专属设置项
  */
@@ -327,11 +335,9 @@ function mapSettings(opts = {}, extra = []) {
         { name: 'Route', type: 'title' },
         { name: 'Background route thickness', key: 'routeWidth', type: 'number', min: 1, max: 20 },
         { name: 'Background route color', key: 'routeColor', type: 'color' },
-        { name: 'Route opacity', key: 'routeOpacity', type: 'number', min: 0, max: 1, step: 0.05, defaultValue: 1 },
         { name: 'Progress route thickness', key: 'progressWidth', type: 'number', min: 1, max: 20 },
         { name: 'Progress route color', key: 'progressColor', type: 'color' },
-        { name: 'Progress opacity', key: 'progressOpacity', type: 'number', min: 0, max: 1, step: 0.05, defaultValue: opts.progressOpacityDefault ?? 1 },
-        { name: 'Route corner radius', key: 'routeCornerRadius', type: 'number', min: 0, max: 20, defaultValue: opts.cornerRadiusDefault ?? 4 },
+        { name: 'Route corner radius', key: 'routeCornerRadius', type: 'number', min: 0, max: 20, defaultValue: 4 },
         { name: 'Current point', type: 'title' },
         { name: 'Current position color', key: 'pointColor', type: 'color' },
         { name: 'Point size', key: 'pointSize', type: 'number', min: 4, max: 120, defaultValue: opts.pointSizeDefault ?? MAP_POINT_SIZE },
@@ -354,7 +360,8 @@ const mapIconSettings = [
 ];
 
 /** 地图组件公共 update：截断进度线 + 移动当前点
- * scale 由调用方（持有 definition）传入，把设计坐标的 nowPoints/当前点换算到缩放后空间 */
+ * scale 由调用方（持有 definition）传入，把设计坐标的 nowPoints/当前点换算到缩放后空间
+ * （为什么这里要乘、build 里为什么要 slice：见 mapChildren 函数头的「缩放契约」） */
 function mapUpdate(box, frameData, progress, ctx, withRotation, scale) {
     if (!box.children || box.children.length < 3) return;
     const sx = scale ? scale.x : 1;
@@ -386,7 +393,7 @@ const appv_map_pan = {
         routeColor: '#FFFF00', routeWidth: 4,
         progressColor: '#FF7F00', progressWidth: 6,
         pointColor: '#FF6347',
-        routeOpacity: 1, progressOpacity: 1, routeCornerRadius: 4,
+        routeCornerRadius: 4,
         pointSize: MAP_POINT_SIZE, pointStroke: '#FFFFFF', pointStrokeWidth: 0,
         showStartEnd: false, markerColor: '#00E676', markerEndColor: '#FF1744',
         pointUseIcon: false, pointIconUrl: '', pointIconRound: true
@@ -412,14 +419,16 @@ const appv_map_a_pan = {
     defaultConfig: {
         x: W - 620, y: 200, width: 600, height: 600, cornerRadius: 4,
         routeColor: '#FFFF00', routeWidth: 4,
-        progressColor: '#FF7F00', progressWidth: 6,
+        // 老款把这条进度线写死 opacity 0.7（箭头地图要让底图路线透出来）。
+        // 透明度不再单列设置项，就把 0.7 折进颜色的 alpha，观感与老款保持一致
+        progressColor: 'rgba(255,127,0,0.7)', progressWidth: 6,
         pointColor: '#FF6347',
-        routeOpacity: 1, progressOpacity: 0.7, routeCornerRadius: 4,
+        routeCornerRadius: 4,
         pointSize: 48, pointStroke: '#FFFFFF', pointStrokeWidth: 0,
         showStartEnd: false, markerColor: '#00E676', markerEndColor: '#FF1744'
     },
     dataBindings: ['distance', 'azimuth'],
-    settings: mapSettings({ progressOpacityDefault: 0.7, pointSizeDefault: 48 }),
+    settings: mapSettings({ pointSizeDefault: 48 }),
     build(config, data) {
         return mapChildren(config, data, { arrow: true });
     },
