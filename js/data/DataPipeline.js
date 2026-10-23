@@ -1,25 +1,28 @@
 /**
  * DataPipeline.js - 数据处理管道
- * 编排：parse → interpolate → compute
+ * 编排：parse → repair → interpolate → compute
  * 是数据从文件到可用状态的唯一入口
  */
 
 import { parse } from '../parsers/index.js';
 import { interpolatePoints } from './interpolator.js';
+import { repairSparseSeries } from './seriesRepair.js';
 import { computeAllFields } from './fieldComputer.js';
 import { validateRq } from './DataSchema.js';
 import { eventBus, Events } from '../core/EventBus.js';
 
 /**
  * 抽取轨迹点数组的调试快照（点数 + 首尾样本 + 摘要），避免直接打印超大数组
+ * 首尾点做浅拷贝：repair / interpolate 会原地改写同一个对象，直接引用会让
+ * 「原始」快照跟着变成修补后的值。
  * @param {Object} rq - 统一数据结构
  */
 function debugSnapshot(rq) {
     const trkpt = rq?.data?.trkpt || [];
     return {
         points: trkpt.length,
-        first: trkpt[0] || null,
-        last: trkpt[trkpt.length - 1] || null,
+        first: trkpt[0] ? { ...trkpt[0] } : null,
+        last: trkpt[trkpt.length - 1] ? { ...trkpt[trkpt.length - 1] } : null,
         summary: rq?.data?.summary || null,
         motion: rq?.data?.motion || null,
         lapStandard: (rq?.data?.lap_standard || []).length,
@@ -34,9 +37,9 @@ class DataPipeline {
     }
 
     /**
-     * 完整处理管道：文件 → 解析 → 插值 → 计算补齐 → 就绪数据
+     * 完整处理管道：文件 → 解析 → 就近修补 → 插值 → 计算补齐 → 就绪数据
      * @param {File} file - 用户上传的文件
-     * @param {Function} [onProgress] - 进度回调 (stage: 'parse'|'interpolate'|'compute')
+     * @param {Function} [onProgress] - 进度回调 (stage: 'parse'|'repair'|'interpolate'|'compute')
      * @returns {Promise<Object>} 处理后的 rq 数据结构
      */
     async process(file, onProgress) {
@@ -54,17 +57,26 @@ class DataPipeline {
         eventBus.emit(Events.DATA_PARSED, rq);
 
         // ===== 调试：原始数据（解析后、逐秒插值前）=====
-        // 注意：interpolatePoints 会原地扩展 rq.data.trkpt，故此处先做一次快照
-        const rawData = { ...debugSnapshot(rq), _note: 'parse 之后、interpolate 之前的原始点快照' };
+        // 注意：repair / interpolatePoints 都会原地改写 rq.data.trkpt，故此处先做一次快照
+        const rawData = { ...debugSnapshot(rq), _note: 'parse 之后、修补与插值之前的原始点快照' };
         window.__rawData = rawData;
-        console.log('[Data][原始 raw] 解析完成（插值前）:', rawData);
+        console.log('[Data][原始 raw] 解析完成（修补与插值前）:', rawData);
 
-        // 2. 逐秒插值
+        // 2. 空值就近修补：设备开机头几秒高程常记成 0，必须在插值前补掉，
+        //    否则逐秒插值会把 0 当真实样本，画出一条从海平面爬上来的假曲线
+        if (onProgress) onProgress('repair');
+        const repairReport = repairSparseSeries(rq);
+        window.__repairReport = repairReport;
+        if (repairReport.filled > 0 || repairReport.allMissing.length) {
+            console.log('[Data][修补 repair] 就近填充:', repairReport);
+        }
+
+        // 3. 逐秒插值
         if (onProgress) onProgress('interpolate');
         interpolatePoints(rq);
         eventBus.emit(Events.DATA_INTERPOLATED, rq);
 
-        // 3. 字段计算补齐
+        // 4. 字段计算补齐
         if (onProgress) onProgress('compute');
         const computed = computeAllFields(rq);
         this._chartData = computed;
@@ -74,14 +86,14 @@ class DataPipeline {
         rq._chartData = computed;
         rq._mapPoints = computed.mapPoints;
 
-        // ===== 调试：处理后的数据（插值 + 字段补齐完成）=====
-        const processedData = { ...debugSnapshot(rq), chartFields: Object.keys(computed || {}) };
+        // ===== 调试：处理后的数据（修补 + 插值 + 字段补齐完成）=====
+        const processedData = { ...debugSnapshot(rq), repair: repairReport, chartFields: Object.keys(computed || {}) };
         window.__processedData = processedData; // 处理摘要快照
         window.__rq = rq;                       // 完整处理后 rq（含 _chartData / _mapPoints）
         window.__trkptData = rq.data.trkpt;     // 逐秒插值后的轨迹点数组
         window.__chartData = computed;          // 图表坐标与极值
-        console.log('[Data][处理 processed] 插值 + 补齐完成:', processedData);
-        console.log('[Data] 控制台可用变量: window.__rawData / __processedData / __rq / __trkptData / __chartData');
+        console.log('[Data][处理 processed] 修补 + 插值 + 补齐完成:', processedData);
+        console.log('[Data] 控制台可用变量: window.__rawData / __repairReport / __processedData / __rq / __trkptData / __chartData');
 
         eventBus.emit(Events.DATA_COMPUTED, rq);
         eventBus.emit(Events.DATA_READY, { rq, chartData: computed, mapPoints: computed.mapPoints });

@@ -71,7 +71,7 @@ with the exported video.
 | `sec` | number | s | seconds since the first point, starts at 0 |
 | `position_lat` | number | ° | WGS84 latitude |
 | `position_long` | number | ° | WGS84 longitude (note: `long`, not `lng`) |
-| `altitude` | number \| null | m | above sea level |
+| `altitude` | number \| null | m | above sea level; `0` is *not* a measurement, see “repair before interpolation” below |
 | `is_pause` | boolean | — | stop detected during parsing |
 | `speed` | number | km/h | see “speed sources” below |
 | `distance` | number | m | cumulative, from the file's own distance track |
@@ -79,6 +79,26 @@ with the exported video.
 | `cadence` | number \| null | steps/min | see “cadence normalisation” |
 | `power` | number \| null | W | cycling/power-meter only, optional |
 | `step_length` | number | m | derived: `speed / (cadence·60/1000)` |
+
+**Repair before interpolation.** `altitude` is the one field that encodes “no
+reading” as a number: `normalValue()` turns a missing value into `0`, and a watch
+that has not locked on yet writes `0` for the first seconds of a track. The
+interpolator cannot tell that apart from a measurement at sea level, so
+`repairSparseSeries(rq)` (`data/seriesRepair.js`) runs over the parsed array first
+and replaces every such sample with the nearest real value of the same series: a
+leading run takes the first real value, a trailing run the last, an interior gap
+takes whichever neighbour is closer (ties go backwards). Only genuine samples are
+used as the source, so a gap becomes two flat steps instead of a ramp, and negative
+altitudes (tunnels, below sea level) count as real data. A file with no altitude at
+all invents nothing — the series stays as parsed and a `[repair] …` warning is
+logged. The default field list is `['altitude']` only: heart rate, cadence, power
+and speed keep their zeros, because there `0` legitimately means “no strap”,
+“stopped”, “no meter”. Consequences downstream are all positive — `baseAltitude`,
+`eleMin`/`eleMax`, `slope` and `Gain`/`Loss` stop being dragged by warm-up zeros.
+`window.__repairReport` says how many points were filled per field, and
+`window.__rawData` still shows the untouched parsed values. The rules above are
+pinned by [`tools/series-repair-test.html`](../tools/series-repair-test.html); run
+it from a static server after touching the module or the pipeline order.
 
 Derived in `fieldComputer.js`, added on top of the parsed values:
 

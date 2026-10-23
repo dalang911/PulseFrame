@@ -106,7 +106,10 @@ parsers/index.js → detectFormat() → parse()
 统一数据结构 rq.data { summary, motion, trkpt[], lap_standard[], lap_user[] }
   │
   ▼
-data/interpolator.js → interpolationPoints() 逐秒线性插值
+data/seriesRepair.js → repairSparseSeries() 高程空值就近填充（必须在插值前，见 DATA_SCHEMA.md）
+  │
+  ▼
+data/interpolator.js → interpolatePoints() 逐秒线性插值
   │
   ▼
 data/fieldComputer.js → computeAllFields()

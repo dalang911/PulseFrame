@@ -96,12 +96,36 @@ FitParser.js  → fitToRq()  → 同上
 JsonParser.js → jsonToRq() → 直通（已是标准格式）
 ```
 
-### 2. 插值阶段 (data/interpolator.js)
+### 2. 空值修补阶段 (data/seriesRepair.js)
+
+设备刚开机时高程常常还没定位，解析后是一段 `0`；`normalValue()` 也把空值统一写成
+`0`。插值分不出「海平面 0 米」和「没读数」，所以必须在插值之前把异常点换成同一
+条序列里最近的真实值：
+
+```
+判定：null / undefined / 非数值 / NaN / Infinity / 0 都算没有真实值（负海拔是真实值）
+填充：开头连续 → 取第一个真实值
+      结尾连续 → 取最后一个真实值
+      中间空洞 → 取左右更近的一侧，等距取前一个
+来源只用原始真实点，补上的点不会再当作来源，所以一段空洞只会摊成两级台阶，不会漂移
+全程都没有真实值时不编造数据，保持原样并打一条 [repair] 警告
+```
+
+默认只补 `altitude`：心率、步频、功率、速度的 `0` 各自是正常语义（没戴心率带、停下
+了、没功率计），不能动。要扩到经纬度只需把字段名传进
+`repairSparseSeries(rq, ['altitude', 'position_lat', 'position_long'])`。补齐后
+`baseAltitude`、`eleMin/eleMax`、`slope`、`Gain/Loss` 都不再被开机段的 0 带偏；
+控制台 `window.__repairReport` 会给出每个字段补了多少个点。
+
+上面这套规则由 [`tools/series-repair-test.html`](../series-repair-test.html) 钉住，
+改完模块或管道顺序后用静态服务器打开重跑一遍。
+
+### 3. 插值阶段 (data/interpolator.js)
 
 将不等间隔的轨迹点线性插值为 1 秒间隔：
 
 ```
-输入: trkpt[] (原始不等间隔)
+输入: trkpt[] (原始不等间隔，已完成空值修补)
 输出: trkpt[] (每秒一个点)
 ```
 
@@ -110,7 +134,7 @@ JsonParser.js → jsonToRq() → 直通（已是标准格式）
 - 位置字段（latitude, longitude）：线性插值
 - 缺失字段：标记为 null
 
-### 3. 计算补齐阶段 (data/fieldComputer.js)
+### 4. 计算补齐阶段 (data/fieldComputer.js)
 
 基于插值后的轨迹点计算衍生字段：
 
@@ -122,7 +146,7 @@ JsonParser.js → jsonToRq() → 直通（已是标准格式）
 | `computeMapPoints()` | lat, lng | mapX, mapY | 地图投影坐标 |
 | `computeChartPoints()` | 各字段 | chart coords | 图表坐标映射 |
 
-### 4. 图表坐标映射
+### 5. 图表坐标映射
 
 图表组件需要 2D 坐标点来绘制曲线：
 

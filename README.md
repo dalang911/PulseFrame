@@ -46,7 +46,7 @@ Most sports-data overlay tools are desktop apps, subscription SaaS, or phone app
 ## Features
 
 - **Inputs:** FIT, GPX, TCX and PulseFrame's own JSON; format auto-detected, then normalised into a single schema.
-- **Derived metrics:** per-second linear interpolation, slope, cumulative ascent/descent, azimuth/heading, map projection points, chart coordinates.
+- **Derived metrics:** altitude repair (a device that has not locked on yet records `0`, which is filled from the nearest real sample before interpolating), per-second linear interpolation, slope, cumulative ascent/descent, azimuth/heading, map projection points, chart coordinates.
 - **48 built-in components** across the palette categories `background`, `text`, `time`, `distance`, `chart`, `attr` (gauges), `map` and `cycling` — heart-rate / pace / elevation charts, heart, pace, speed, cadence, rpm and power gauges, distance bars & rulers, lap tables, date-time and weather panels, web map & compass.
 - **Canvas presets:** 1920×1080 and 1080×1920; any size can be typed in.
 - **Visual designer** (`designer.html`) for drag-and-drop layout plus a property editor generated from each component's `settings` declaration.
@@ -121,7 +121,7 @@ pulseframe/
 │   ├── app.js            # editor entry point
 │   ├── core/             # EventBus, Store, constants, appConfig
 │   ├── parsers/          # GPX / TCX / FIT / JSON → unified schema
-│   ├── data/             # interpolator, fieldComputer, DataSchema
+│   ├── data/             # seriesRepair, interpolator, fieldComputer, DataSchema
 │   ├── components/       # registry, factory, updater, definitions/
 │   ├── renderer/         # LeaferManager, frameRenderer, VideoEngine
 │   ├── ui/               # settings panel, template manager, template shop

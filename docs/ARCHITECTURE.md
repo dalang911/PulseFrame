@@ -26,7 +26,7 @@ transpile step, so the source in this repository *is* what runs.
    │ GPX TCX FIT JSON│ │ DataPipeline  │ │ registry · factory   │
    │ → unified `rq`  │ │ interpolator  │ │ updater · definitions/│
    │                 │ │ fieldComputer │ │ visual/loader        │
-   │                 │ │ DataSchema    │ │ (shared components)  │
+   │                 │ │ repair·schema │ │ (shared components)  │
    └─────────────────┘ └────┬──────────┘ └──────┬───────────────┘
                             │                   │
               ┌─────────────▼──────┐   ┌────────▼─────────────┐
@@ -129,14 +129,17 @@ usable data. Stages, in order:
 |---|---|---|---|
 | detect + parse | `parsers/index.js` → `gpxToRq` / `tcxToRq` / `fitToRq` / `jsonToRq` | any supported file → the unified `rq` structure | `DATA_PARSED` |
 | validate | `data/DataSchema.js` → `validateRq(rq)` | returns `{ valid, errors }`; invalid input throws instead of rendering nonsense | — |
+| repair | `data/seriesRepair.js` → `repairSparseSeries(rq)` | replaces altitude samples that mean "no reading" (`null` / non-number / non-finite / `0`) with the nearest real sample of the same series: leading run → first real value, trailing run → last real value, interior gap → the closer neighbour (ties go backwards); a series with no real value at all is left untouched. Must run **before** interpolation, which otherwise treats a warm-up `0` as a measurement and draws a climb out of sea level | — |
 | interpolate | `data/interpolator.js` → `interpolatePoints(rq)` | rewrites `rq.data.trkpt` **in place** to exactly one point per second; `formatValue()` rounds each field to its sensible precision | `DATA_INTERPOLATED` |
 | derive | `data/fieldComputer.js` → `computeAllFields(rq)` | `computeSlope`, `computeGainLoss`, `computeAzimuth` mutate the points; `computeDerivedFields` materialises the Studio-bindable derived keys onto each frame and returns the whole-activity quantities (`totalKm`, `duration`, `totalTime`, `paceBoundMin/Max`) that merge into `chartData`; `computeChartPoints` and `computeMapPoints` return the geometry | `DATA_COMPUTED` |
 | ready | — | attaches `rq._chartData` / `rq._mapPoints` | `DATA_READY` |
 
-Because `interpolatePoints` mutates in place, `DataPipeline` takes a debug
-snapshot *before* interpolating; the console exposes `window.__rawData`,
-`__processedData`, `__rq`, `__trkptData` and `__chartData` while you work. They
-are inspection aids only — nothing in the app reads them back.
+Because repair and interpolation both mutate in place, `DataPipeline` takes its
+debug snapshot *before* them (its `first` / `last` samples are shallow copies, so
+the raw view keeps showing what the file actually contained); the console exposes
+`window.__rawData`, `__repairReport`, `__processedData`, `__rq`, `__trkptData` and
+`__chartData` while you work. They are inspection aids only — nothing in the app
+reads them back.
 
 Details of the resulting structure are in [DATA_SCHEMA.md](DATA_SCHEMA.md).
 
@@ -223,7 +226,7 @@ js/
   app.js                  editor entry
   core/                   event bus, state, canvas refs, config, units, fonts
   parsers/                format detection + GPX/TCX/FIT/JSON → rq
-  data/                   DataPipeline, interpolator, fieldComputer, DataSchema
+  data/                   DataPipeline, interpolator, seriesRepair, fieldComputer, DataSchema
   components/             registry, factory, updater, definitions/, visual/
   renderer/               LeaferManager, frameRenderer, VideoEngine
   ui/                     panels, templates (native/local/shared), dialogs

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>seriesRepair 就近填充校验</title>
+<style>
+  body { font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; margin: 24px; background: #fafafa; color: #222; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.note { color: #666; margin: 0 0 16px; }
+  #summary { font-weight: 600; margin-bottom: 12px; }
+  #summary.ok { color: #1a7f37; }
+  #summary.bad { color: #b42318; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; vertical-align: top; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  th { background: #f0f0f0; }
+  td.pass { color: #1a7f37; width: 48px; }
+  td.fail { color: #b42318; font-weight: 700; width: 48px; }
+</style>
+</head>
+<body>
+<h1>seriesRepair 就近填充校验</h1>
+<p class="note">
+  防漂移页：<code>js/data/seriesRepair.js</code> 的空值判定与就近规则。改完这个模块（或
+  <code>DataPipeline</code> 的调用位置）后，用静态服务器打开本页重跑一遍：
+  <code>python -m http.server 8123</code> → <code>http://127.0.0.1:8123/tools/series-repair-test.html</code>。
+</p>
+<div id="summary">运行中…</div>
+<table>
+  <thead><tr><th>结果</th><th>用例</th><th>期望</th><th>实际</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script type="module">
+import { isSparseSample, fillNearest, repairSparseSeries, DEFAULT_REPAIR_FIELDS }
+    from '../js/data/seriesRepair.js';
+
+const results = [];
+const eq = (name, got, want) => results.push({ name, got, want, ok: JSON.stringify(got) === JSON.stringify(want) });
+const series = (...vals) => vals.map(v => ({ altitude: v }));
+const alt = (arr) => arr.map(p => p.altitude);
+
+// 1. 异常判定：只认空 / 非数值 / 非有限数 / 0
+eq('判定：0 / null / undefined / NaN / Infinity 为异常',
+    [0, null, undefined, NaN, Infinity].map(isSparseSample), [true, true, true, true, true]);
+eq('判定：负海拔与正常值不算异常', [-12.5, 0.5, 4800].map(isSparseSample), [false, false, false]);
+eq('判定：字符串 / 对象 / 布尔算异常', ['12', {}, [], true].map(isSparseSample), [true, true, true, true]);
+eq('默认只补高程', DEFAULT_REPAIR_FIELDS, ['altitude']);
+
+// 2. 开头 / 结尾 / 中间
+{ const t = series(0, 0, 0, 10, 20); const r = fillNearest(t, 'altitude');
+  eq('开头连续 0 取第一个真实值', alt(t), [10, 10, 10, 10, 20]);
+  eq('开头填充计数', r.filled, 3); }
+{ const t = series(10, 20, 0, 0); const r = fillNearest(t, 'altitude');
+  eq('结尾连续 0 取最后一个真实值', alt(t), [10, 20, 20, 20]);
+  eq('结尾填充计数', r.filled, 2); }
+{ const t = series(10, 0, 30); fillNearest(t, 'altitude');
+  eq('中间单点空洞等距时取前一个', alt(t), [10, 10, 30]); }
+{ const t = series(10, 0, 0, 0, 30); fillNearest(t, 'altitude');
+  eq('中间三点空洞取更近一侧', alt(t), [10, 10, 10, 30, 30]); }
+{ const t = series(10, 0, 0, 50, 0, 0, 0, 70); fillNearest(t, 'altitude');
+  // 洞1（idx1-2）：idx1 距前 1 取 10，idx2 距前 2 / 距后 1 取 50
+  // 洞2（idx4-6）：idx4 距前 1 取 50，idx5 等距取前 50，idx6 距后 1 取 70
+  eq('多段空洞各自就近取原始真实点', alt(t), [10, 10, 50, 50, 50, 50, 70, 70]); }
+
+// 3. 边界
+{ const t = series(0, 0, 0); const r = fillNearest(t, 'altitude');
+  eq('全程无真实值时不编造数据', alt(t), [0, 0, 0]);
+  eq('全程无真实值上报 allMissing', r.allMissing, true); }
+{ const t = series(5, 6, 7); const r = fillNearest(t, 'altitude');
+  eq('没有异常点时原样不动', alt(t), [5, 6, 7]);
+  eq('没有异常点时计数为 0', r.filled, 0); }
+{ const t = [{}, { altitude: null }, { altitude: 40 }, { altitude: NaN }];
+  fillNearest(t, 'altitude'); eq('字段缺失 / null / NaN 同样被补', alt(t), [40, 40, 40, 40]); }
+{ const t = series(0, -5, 0, 10); fillNearest(t, 'altitude');
+  eq('负海拔既是真实值也能当来源', alt(t), [-5, -5, -5, 10]); }
+{ const t = series(0, 123.45, 0); fillNearest(t, 'altitude');
+  eq('值原样搬运，不做二次取整', alt(t), [123.45, 123.45, 123.45]); }
+{ const t = series(0, 10, 0, 0, 30, 0); fillNearest(t, 'altitude');
+  const once = alt(t); const again = fillNearest(t, 'altitude');
+  eq('重复执行结果不变（幂等）', alt(t), once);
+  eq('第二次没有点需要补', again.filled, 0); }
+
+// 4. 管道入口
+{ const rq = { data: { trkpt: series(0, 0, 12.5, 0, 30) } };
+  const rep = repairSparseSeries(rq);
+  eq('repairSparseSeries 默认字段生效', alt(rq.data.trkpt), [12.5, 12.5, 12.5, 12.5, 30]);
+  eq('统计：开头 2 + 中间 1', [rep.filled, rep.byKey.altitude, rep.allMissing.length], [3, 3, 0]); }
+{ const pts = [{ altitude: 0, heart_rate: 0 }, { altitude: 50, heart_rate: 120 }];
+  repairSparseSeries({ data: { trkpt: pts } });
+  eq('心率 / 功率 / 速度的 0 不被误伤', pts.map(p => p.heart_rate), [0, 120]); }
+{ eq('少于 2 个点直接跳过', repairSparseSeries({ data: { trkpt: [{ altitude: 10 }] } }).filled, 0);
+  eq('空数据结构不报错', repairSparseSeries({}).filled, 0); }
+{ const rq = { data: { trkpt: series(0, 0, 30) } };
+  const rep = repairSparseSeries(rq, ['position_lat']);
+  eq('只补指定字段，其他字段不动', alt(rq.data.trkpt), [0, 0, 30]);
+  eq('指定字段全程缺失时上报', rep.allMissing, ['position_lat']); }
+
+const rows = document.getElementById('rows');
+results.forEach(r => {
+    const tr = document.createElement('tr');
+    const td0 = document.createElement('td');
+    td0.className = r.ok ? 'pass' : 'fail';
+    td0.textContent = r.ok ? 'ok' : 'FAIL';
+    [td0, r.name, JSON.stringify(r.want), JSON.stringify(r.got)].forEach(text => {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+    });
+    rows.appendChild(tr);
+});
+
+const failed = results.filter(r => !r.ok).length;
+const summary = document.getElementById('summary');
+summary.className = failed ? 'bad' : 'ok';
+summary.textContent = failed
+    ? `${results.length - failed} / ${results.length} 通过，${failed} 个失败`
+    : `${results.length} / ${results.length} 全部通过`;
+document.title = (failed ? '✗ ' : '✓ ') + 'seriesRepair 校验';
+</script>
+</body>
+</html>
