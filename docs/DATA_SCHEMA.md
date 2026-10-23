@@ -51,8 +51,15 @@ better an error than a half-drawn dashboard.
 | `total_descent` | number | cumulative descent, metres |
 
 Not every format supplies every figure: GPX takes ascent/descent from the
-parser's elevation `pos` / `neg` totals, while FIT reports `total_ascent` in
-kilometres and the parser multiplies by 1000 to land on metres.
+parser's elevation `pos` / `neg` totals. FIT's native unit is metres as well, but
+`fitToRq()` builds `FitParser` with `lengthUnit: 'km'`, and that library routes
+every length-typed field — `distance`, all altitude variants, `total_ascent` /
+`total_descent`, `gps_accuracy` — through one `lengthUnits` table, so the values
+arrive in **kilometres** and `parsers/index.js` multiplies by 1000 to land back on
+metres. The `* 1000` and that option are a pair: set the option to `'m'` without
+deleting them and FIT altitudes quietly grow a thousandfold. `step_length` is the
+mirror-image trap — it is *not* routed through that table, so it arrives in
+millimetres (FIT defines it as `{ scale: 10, units: 'mm' }`) and is divided by 1000.
 
 **There is no `pace` field.** Pace is the reciprocal of speed and is formatted per
 component (see `js/utils/format.js`), because a runner wants `min/km` while a
@@ -69,7 +76,7 @@ with the exported video.
 |---|---|---|---|
 | `timestamp` | number | s | absolute Unix seconds (UTC) |
 | `sec` | number | s | seconds since the first point, starts at 0 |
-| `position_lat` | number | ° | WGS84 latitude |
+| `position_lat` | number | ° | WGS84 latitude; repaired **together with** `position_long` as one pair, see “repair before interpolation” below |
 | `position_long` | number | ° | WGS84 longitude (note: `long`, not `lng`) |
 | `altitude` | number \| null | m | above sea level; `0` is *not* a measurement, see “repair before interpolation” below |
 | `is_pause` | boolean | — | stop detected during parsing |
@@ -80,22 +87,37 @@ with the exported video.
 | `power` | number \| null | W | cycling/power-meter only, optional |
 | `step_length` | number | m | derived: `speed / (cadence·60/1000)` |
 
-**Repair before interpolation.** `altitude` is the one field that encodes “no
-reading” as a number: `normalValue()` turns a missing value into `0`, and a watch
-that has not locked on yet writes `0` for the first seconds of a track. The
-interpolator cannot tell that apart from a measurement at sea level, so
-`repairSparseSeries(rq)` (`data/seriesRepair.js`) runs over the parsed array first
-and replaces every such sample with the nearest real value of the same series: a
-leading run takes the first real value, a trailing run the last, an interior gap
-takes whichever neighbour is closer (ties go backwards). Only genuine samples are
-used as the source, so a gap becomes two flat steps instead of a ramp, and negative
-altitudes (tunnels, below sea level) count as real data. A file with no altitude at
-all invents nothing — the series stays as parsed and a `[repair] …` warning is
-logged. The default field list is `['altitude']` only: heart rate, cadence, power
-and speed keep their zeros, because there `0` legitimately means “no strap”,
-“stopped”, “no meter”. Consequences downstream are all positive — `baseAltitude`,
-`eleMin`/`eleMax`, `slope` and `Gain`/`Loss` stop being dragged by warm-up zeros.
-`window.__repairReport` says how many points were filled per field, and
+**Repair before interpolation.** Two fields encode “no reading” as a number:
+`normalValue()` turns a missing altitude into `0`, and an unresolved position lands
+as `(0, 0)`. A watch that has not locked on yet writes both for the first seconds of
+a track. The interpolator cannot tell either apart from a measurement — it happily
+blends a `0` altitude (drawing a climb out of sea level) and a `0` coordinate
+(flinging the map line to the Gulf of Guinea, and wrecking the projection bounds for
+every other vertex). So `repairSparseSeries(rq)` (`data/seriesRepair.js`) runs over
+the parsed array first, on two field groups:
+
+- `altitude` — **nearest**: a leading run takes the first real value, a trailing run
+  the last, an interior gap takes whichever neighbour is closer (ties go backwards).
+  Only genuine samples are used as the source, so a gap becomes two flat steps
+  instead of a ramp, and negative altitudes (tunnels, below sea level) count as real
+  data.
+- `position_lat` + `position_long` — **bridge**: leading and trailing runs freeze at
+  the mouth of the gap (the frame timeline keeps its length), while an interior gap
+  is linearly interpolated between the two real positions that bracket it — the same
+  thing `interpolatePoints` does for two real GPS samples, so a long dropout reads as
+  a straight line instead of hold-then-teleport. Coordinates are repaired **as a
+  pair**: if either component looks missing the whole point is bad and both come from
+  one source, so a latitude from point A is never stitched to a longitude from point B.
+
+A series with no real value at all invents nothing — it stays as parsed and a
+`[repair] …` warning is logged (indoor/treadmill tracks hit this every load, which is
+expected). Heart rate, cadence, power and speed are deliberately *not* in the list:
+there `0` legitimately means “no strap”, “stopped”, “no meter”. One accepted trade-off:
+an exact `0` latitude or longitude (equator / prime meridian, after rounding to 6
+decimals) reads as missing. Downstream everything gets better — `baseAltitude`,
+`eleMin`/`eleMax`, `slope` and `Gain`/`Loss` stop being dragged by warm-up zeros, and
+`computeMapPoints`/`computeAzimuth` stop seeing phantom (0, 0) vertices.
+`window.__repairReport` reports the repaired point count per group, and
 `window.__rawData` still shows the untouched parsed values. The rules above are
 pinned by [`tools/series-repair-test.html`](../tools/series-repair-test.html); run
 it from a static server after touching the module or the pipeline order.

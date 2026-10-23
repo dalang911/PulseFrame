@@ -232,6 +232,18 @@ export function tcxToRq(tcxContent) {
 
 /**
  * FIT ArrayBuffer → 统一 rq 数据结构
+ *
+ * 单位链（动这段代码前先看完）：FIT 协议原生单位是米，但下面构造 FitParser 时
+ * 传了 lengthUnit: 'km'，而它的 applyOptions() 把 distance / altitude /
+ * enhanced_altitude / min|avg|max_altitude / total_ascent / total_descent /
+ * gps_accuracy 这一整批 length 类字段都路由到同一张 lengthUnits 换算表，
+ * 所以库吐回来的高程和距离已经是公里了。统一 schema 约定 altitude、distance
+ * 用米，因此这里对高程（含累计爬升/下降）与距离再 * 1000 换回米——
+ * 那几处 * 1000 不是笔误，是和 lengthUnit: 'km' 配对的。
+ * 反例：cp.step_length 不在那张表里，FIT 字段定义是 { scale: 10, units: 'mm' }，
+ * 拿到的是毫米，所以那里写的是 / 1000。
+ * 若把 lengthUnit 改成 'm'，必须同步删掉这些 * 1000，否则高程与距离会静默放大一千倍。
+ *
  * @param {ArrayBuffer} fitBuffer
  * @returns {Object} rq 数据结构
  */

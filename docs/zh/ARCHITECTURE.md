@@ -106,7 +106,7 @@ parsers/index.js → detectFormat() → parse()
 统一数据结构 rq.data { summary, motion, trkpt[], lap_standard[], lap_user[] }
   │
   ▼
-data/seriesRepair.js → repairSparseSeries() 高程空值就近填充（必须在插值前，见 DATA_SCHEMA.md）
+data/seriesRepair.js → repairSparseSeries() 空值组修补：高程就近冻结、经纬度成对补且洞内直线桥接（必须在插值前，见 DATA_SCHEMA.md）
   │
   ▼
 data/interpolator.js → interpolatePoints() 逐秒线性插值

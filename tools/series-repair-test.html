@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>seriesRepair 就近填充校验</title>
+<title>seriesRepair 空值修补校验</title>
 <style>
   body { font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; margin: 24px; background: #fafafa; color: #222; }
   h1 { font-size: 18px; margin: 0 0 4px; }
@@ -18,10 +18,10 @@
 </style>
 </head>
 <body>
-<h1>seriesRepair 就近填充校验</h1>
+<h1>seriesRepair 空值修补校验</h1>
 <p class="note">
-  防漂移页：<code>js/data/seriesRepair.js</code> 的空值判定与就近规则。改完这个模块（或
-  <code>DataPipeline</code> 的调用位置）后，用静态服务器打开本页重跑一遍：
+  防漂移页：<code>js/data/seriesRepair.js</code> 的空值判定、分组规则与两种策略（高程就近冻结 /
+  经纬度洞内桥接）。改完这个模块（或 <code>DataPipeline</code> 的调用位置）后，用静态服务器打开本页重跑一遍：
   <code>python -m http.server 8123</code> → <code>http://127.0.0.1:8123/tools/series-repair-test.html</code>。
 </p>
 <div id="summary">运行中…</div>
@@ -31,68 +31,119 @@
 </table>
 
 <script type="module">
-import { isSparseSample, fillNearest, repairSparseSeries, DEFAULT_REPAIR_FIELDS }
-    from '../js/data/seriesRepair.js';
+import {
+    isSparseSample, repairGroup, repairSparseSeries,
+    REPAIR_GROUPS, STRATEGY_NEAREST, STRATEGY_BRIDGE, groupLabel
+} from '../js/data/seriesRepair.js';
 
 const results = [];
 const eq = (name, got, want) => results.push({ name, got, want, ok: JSON.stringify(got) === JSON.stringify(want) });
-const series = (...vals) => vals.map(v => ({ altitude: v }));
 const alt = (arr) => arr.map(p => p.altitude);
+const lat = (arr) => arr.map(p => p.position_lat);
+const lon = (arr) => arr.map(p => p.position_long);
+const series = (...vals) => vals.map(v => ({ altitude: v }));
+const coords = (...pairs) => pairs.map(([a, b]) => ({ position_lat: a, position_long: b }));
+const ALT = ['altitude'];
+const POS = ['position_lat', 'position_long'];
 
-// 1. 异常判定：只认空 / 非数值 / 非有限数 / 0
+// 1. 默认名单与策略
+eq('默认补两组：高程就近、经纬度桥接',
+    REPAIR_GROUPS.map(g => `${groupLabel(g.keys)}=${g.strategy}`),
+    ['altitude=' + STRATEGY_NEAREST, 'position_lat+position_long=' + STRATEGY_BRIDGE]);
+
+// 2. 异常判定：只认空 / 非数值 / 非有限数 / 0
 eq('判定：0 / null / undefined / NaN / Infinity 为异常',
     [0, null, undefined, NaN, Infinity].map(isSparseSample), [true, true, true, true, true]);
 eq('判定：负海拔与正常值不算异常', [-12.5, 0.5, 4800].map(isSparseSample), [false, false, false]);
 eq('判定：字符串 / 对象 / 布尔算异常', ['12', {}, [], true].map(isSparseSample), [true, true, true, true]);
-eq('默认只补高程', DEFAULT_REPAIR_FIELDS, ['altitude']);
 
-// 2. 开头 / 结尾 / 中间
-{ const t = series(0, 0, 0, 10, 20); const r = fillNearest(t, 'altitude');
-  eq('开头连续 0 取第一个真实值', alt(t), [10, 10, 10, 10, 20]);
-  eq('开头填充计数', r.filled, 3); }
-{ const t = series(10, 20, 0, 0); const r = fillNearest(t, 'altitude');
-  eq('结尾连续 0 取最后一个真实值', alt(t), [10, 20, 20, 20]);
-  eq('结尾填充计数', r.filled, 2); }
-{ const t = series(10, 0, 30); fillNearest(t, 'altitude');
-  eq('中间单点空洞等距时取前一个', alt(t), [10, 10, 30]); }
-{ const t = series(10, 0, 0, 0, 30); fillNearest(t, 'altitude');
-  eq('中间三点空洞取更近一侧', alt(t), [10, 10, 10, 30, 30]); }
-{ const t = series(10, 0, 0, 50, 0, 0, 0, 70); fillNearest(t, 'altitude');
+// 3. 高程（nearest）：开头 / 结尾 / 中间
+{ const t = series(0, 0, 0, 10, 20); const r = repairGroup(t, ALT);
+  eq('高程：开头连续 0 取第一个真实值', alt(t), [10, 10, 10, 10, 20]);
+  eq('高程：开头填充计数', r.filled, 3); }
+{ const t = series(10, 20, 0, 0); const r = repairGroup(t, ALT);
+  eq('高程：结尾连续 0 取最后一个真实值', alt(t), [10, 20, 20, 20]);
+  eq('高程：结尾填充计数', r.filled, 2); }
+{ const t = series(10, 0, 30); repairGroup(t, ALT);
+  eq('高程：中间单点空洞等距时取前一个', alt(t), [10, 10, 30]); }
+{ const t = series(10, 0, 0, 0, 30); repairGroup(t, ALT);
+  eq('高程：中间三点空洞取更近一侧', alt(t), [10, 10, 10, 30, 30]); }
+{ const t = series(10, 0, 0, 50, 0, 0, 0, 70); repairGroup(t, ALT);
   // 洞1（idx1-2）：idx1 距前 1 取 10，idx2 距前 2 / 距后 1 取 50
   // 洞2（idx4-6）：idx4 距前 1 取 50，idx5 等距取前 50，idx6 距后 1 取 70
-  eq('多段空洞各自就近取原始真实点', alt(t), [10, 10, 50, 50, 50, 50, 70, 70]); }
+  eq('高程：多段空洞各自就近取原始真实点', alt(t), [10, 10, 50, 50, 50, 50, 70, 70]); }
+{ const t = series(0, -5, 0, 10); repairGroup(t, ALT);
+  eq('高程：负海拔既是真实值也能当来源', alt(t), [-5, -5, -5, 10]); }
+{ const t = series(0, 123.45, 0); repairGroup(t, ALT);
+  eq('高程：值原样搬运，不做二次取整', alt(t), [123.45, 123.45, 123.45]); }
 
-// 3. 边界
-{ const t = series(0, 0, 0); const r = fillNearest(t, 'altitude');
+// 4. 经纬度（bridge）：开头/结尾冻结，洞内线性
+{ const t = coords([0, 0], [0, 0], [10, 20], [12, 24]); const r = repairGroup(t, POS, STRATEGY_BRIDGE);
+  eq('坐标：开头异常冻结在第一个真实点（纬度）', lat(t), [10, 10, 10, 12]);
+  eq('坐标：开头异常冻结在第一个真实点（经度）', lon(t), [20, 20, 20, 24]);
+  eq('坐标：开头填充计数', r.filled, 2); }
+{ const t = coords([10, 20], [12, 24], [0, 0], [0, 0]); repairGroup(t, POS, STRATEGY_BRIDGE);
+  eq('坐标：结尾异常冻结在最后一个真实点', lat(t), [10, 12, 12, 12]);
+  eq('坐标：结尾异常不造中间值', lon(t), [20, 24, 24, 24]); }
+{ const t = coords([10, 20], [0, 0], [12, 24]); repairGroup(t, POS, STRATEGY_BRIDGE);
+  eq('坐标：单点空洞落在两端正中（纬）', lat(t), [10, 11, 12]);
+  eq('坐标：单点空洞落在两端正中（经）', lon(t), [20, 22, 24]); }
+{ const t = coords([10, 20], [0, 0], [0, 0], [13, 25]); repairGroup(t, POS, STRATEGY_BRIDGE);
+  eq('坐标：两点空洞按 1/3、2/3 线性桥接', [lat(t), lon(t)],
+      [[10, 11, 12, 13], [20, 21.666667, 23.333333, 25]]); }
+{ const t = coords([10, 20], [0, 0], [12, 24], [0, 0], [0, 0]); repairGroup(t, POS, STRATEGY_BRIDGE);
+  eq('坐标：中段桥接 + 尾段冻结', lat(t), [10, 11, 12, 12, 12]);
+  eq('坐标：桥接不污染后续真实点', lon(t), [20, 22, 24, 24, 24]); }
+{ const t = coords([10, 20], [0, 0], [12, 24]); repairGroup(t, POS);
+  eq('坐标：默认策略是 nearest 时等距取前一个', lat(t), [10, 10, 12]); }
+
+// 5. 分组语义：一组里任一字段异常，整组一起换来源，不拆组
+{ const t = coords([10, 0], [11, 22]); repairGroup(t, POS, STRATEGY_BRIDGE);
+  eq('分组：经度为 0 时纬度一起取自同一点', lat(t), [11, 11]);
+  eq('分组：经度补齐', lon(t), [22, 22]); }
+{ const t = [{ position_lat: NaN, position_long: 20 }, { position_lat: 11, position_long: 22 }];
+  repairGroup(t, POS, STRATEGY_BRIDGE);
+  eq('分组：NaN 纬度同样触发整组替换', lat(t), [11, 11]); }
+
+// 6. 边界与幂等
+{ const t = series(0, 0, 0); const r = repairGroup(t, ALT);
   eq('全程无真实值时不编造数据', alt(t), [0, 0, 0]);
   eq('全程无真实值上报 allMissing', r.allMissing, true); }
-{ const t = series(5, 6, 7); const r = fillNearest(t, 'altitude');
+{ const t = series(5, 6, 7); const r = repairGroup(t, ALT);
   eq('没有异常点时原样不动', alt(t), [5, 6, 7]);
   eq('没有异常点时计数为 0', r.filled, 0); }
 { const t = [{}, { altitude: null }, { altitude: 40 }, { altitude: NaN }];
-  fillNearest(t, 'altitude'); eq('字段缺失 / null / NaN 同样被补', alt(t), [40, 40, 40, 40]); }
-{ const t = series(0, -5, 0, 10); fillNearest(t, 'altitude');
-  eq('负海拔既是真实值也能当来源', alt(t), [-5, -5, -5, 10]); }
-{ const t = series(0, 123.45, 0); fillNearest(t, 'altitude');
-  eq('值原样搬运，不做二次取整', alt(t), [123.45, 123.45, 123.45]); }
-{ const t = series(0, 10, 0, 0, 30, 0); fillNearest(t, 'altitude');
-  const once = alt(t); const again = fillNearest(t, 'altitude');
+  repairGroup(t, ALT); eq('字段缺失 / null / NaN 同样被补', alt(t), [40, 40, 40, 40]); }
+{ const t = series(0, 10, 0, 0, 30, 0); repairGroup(t, ALT);
+  const once = alt(t); const again = repairGroup(t, ALT);
   eq('重复执行结果不变（幂等）', alt(t), once);
   eq('第二次没有点需要补', again.filled, 0); }
+{ const t = coords([0, 0], [0, 0]); const r = repairGroup(t, POS, STRATEGY_BRIDGE);
+  eq('全程 (0,0) 的室内轨迹不动数据', [lat(t), lon(t)], [[0, 0], [0, 0]]);
+  eq('全程 (0,0) 上报 allMissing', r.allMissing, true); }
 
-// 4. 管道入口
-{ const rq = { data: { trkpt: series(0, 0, 12.5, 0, 30) } };
+// 7. 管道入口
+{ const rq = { data: { trkpt: [
+      { altitude: 0, position_lat: 0, position_long: 0 },
+      { altitude: 12.5, position_lat: 10, position_long: 20 },
+      { altitude: 0, position_lat: 0, position_long: 0 },
+      { altitude: 30, position_lat: 12, position_long: 24 }
+  ] } };
   const rep = repairSparseSeries(rq);
-  eq('repairSparseSeries 默认字段生效', alt(rq.data.trkpt), [12.5, 12.5, 12.5, 12.5, 30]);
-  eq('统计：开头 2 + 中间 1', [rep.filled, rep.byKey.altitude, rep.allMissing.length], [3, 3, 0]); }
-{ const pts = [{ altitude: 0, heart_rate: 0 }, { altitude: 50, heart_rate: 120 }];
+  eq('管道：高程就近', alt(rq.data.trkpt), [12.5, 12.5, 12.5, 30]);
+  eq('管道：坐标开头冻结 + 中间桥接',
+      [lat(rq.data.trkpt), lon(rq.data.trkpt)], [[10, 10, 11, 12], [20, 20, 22, 24]]);
+  eq('管道：分组统计', [rep.filled, rep.groups, rep.allMissing.length],
+      [4, { altitude: 2, 'position_lat+position_long': 2 }, 0]); }
+{ const pts = [{ altitude: 0, heart_rate: 0, position_lat: 10, position_long: 20 },
+               { altitude: 50, heart_rate: 120, position_lat: 11, position_long: 22 }];
   repairSparseSeries({ data: { trkpt: pts } });
   eq('心率 / 功率 / 速度的 0 不被误伤', pts.map(p => p.heart_rate), [0, 120]); }
-{ eq('少于 2 个点直接跳过', repairSparseSeries({ data: { trkpt: [{ altitude: 10 }] } }).filled, 0);
+{ eq('少于 2 个点直接跳过', repairSparseSeries({ data: { trkpt: [{ altitude: 10, position_lat: 1, position_long: 2 }] } }).filled, 0);
   eq('空数据结构不报错', repairSparseSeries({}).filled, 0); }
 { const rq = { data: { trkpt: series(0, 0, 30) } };
-  const rep = repairSparseSeries(rq, ['position_lat']);
-  eq('只补指定字段，其他字段不动', alt(rq.data.trkpt), [0, 0, 30]);
+  const rep = repairSparseSeries(rq, [{ keys: ['position_lat'], strategy: STRATEGY_NEAREST }]);
+  eq('只补指定字段组，其他组不动', alt(rq.data.trkpt), [0, 0, 30]);
   eq('指定字段全程缺失时上报', rep.allMissing, ['position_lat']); }
 
 const rows = document.getElementById('rows');

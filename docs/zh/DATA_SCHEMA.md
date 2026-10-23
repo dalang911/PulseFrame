@@ -98,27 +98,43 @@ JsonParser.js → jsonToRq() → 直通（已是标准格式）
 
 ### 2. 空值修补阶段 (data/seriesRepair.js)
 
-设备刚开机时高程常常还没定位，解析后是一段 `0`；`normalValue()` 也把空值统一写成
-`0`。插值分不出「海平面 0 米」和「没读数」，所以必须在插值之前把异常点换成同一
-条序列里最近的真实值：
+设备刚开机时高程常常还没定位，经纬度也一样定不上；`normalValue()` 把这些没读数的
+字段统一写成 `0`，于是解析完的开头是一段 `altitude: 0` 和 `position: (0, 0)`。插值
+分不出「海平面 0 米」和「没读数」，也分不出「赤道本初子午线」和「没定位」，所以必须
+在插值之前把异常样本换成同一组字段里的真实值。修补按**字段组**进行，每组一个策略：
 
 ```
 判定：null / undefined / 非数值 / NaN / Infinity / 0 都算没有真实值（负海拔是真实值）
-填充：开头连续 → 取第一个真实值
-      结尾连续 → 取最后一个真实值
-      中间空洞 → 取左右更近的一侧，等距取前一个
-来源只用原始真实点，补上的点不会再当作来源，所以一段空洞只会摊成两级台阶，不会漂移
-全程都没有真实值时不编造数据，保持原样并打一条 [repair] 警告
+
+altitude —— nearest（就近冻结）
+  开头连续 → 取第一个真实值
+  结尾连续 → 取最后一个真实值
+  中间空洞 → 取左右更近的一侧，等距取前一个
+  只用原始真实点当来源，补上的点不再当作来源，所以一段空洞只会摊成两级台阶，不会漂移
+
+position_lat + position_long —— bridge（洞内直线桥接）
+  开头 / 结尾连续 → 同样冻结在洞口，帧数不变
+  中间空洞 → 在空洞两侧的两个真实位置之间线性插值，并按 formatValue 保留 6 位小数，
+             和 interpolatePoints 对两个真实 GPS 点做的事一致
+  经纬度必须成对判定、成对取源：只要有一个分量像缺值，整个点就算坏，两个分量一起补，
+  绝不会出现 A 点的纬度接 B 点的经度
 ```
 
-默认只补 `altitude`：心率、步频、功率、速度的 `0` 各自是正常语义（没戴心率带、停下
-了、没功率计），不能动。要扩到经纬度只需把字段名传进
-`repairSparseSeries(rq, ['altitude', 'position_lat', 'position_long'])`。补齐后
-`baseAltitude`、`eleMin/eleMax`、`slope`、`Gain/Loss` 都不再被开机段的 0 带偏；
-控制台 `window.__repairReport` 会给出每个字段补了多少个点。
+长时间没定位之所以要桥接而不是冻结，是因为冻结会让地图线"停在原地再瞬移"，桥接只让
+它变成一段直线，看起来就是常见的 GPS 掉点。
 
-上面这套规则由 [`tools/series-repair-test.html`](../series-repair-test.html) 钉住，
-改完模块或管道顺序后用静态服务器打开重跑一遍。
+默认只列了这两组：心率、步频、功率、速度的 `0` 各自是正常语义（没戴心率带、停下了、
+没功率计），不能动；要扩展就往 `REPAIR_GROUPS` 里加一组，或者直接传参
+`repairSparseSeries(data, [{ keys: ['altitude'], strategy: STRATEGY_NEAREST }])`。
+一整组都没有真实值时不编造数据，保持原样并打一条 `[repair] …` 警告（跑步机、室内
+骑行每次加载都会命中这条，属预期）。已知取舍：赤道/本初子午线上正好为 `0` 的经纬度
+（6 位小数取整后）会被当成缺值。补齐后下游全部受益——`baseAltitude`、`eleMin/eleMax`、
+`slope`、`Gain/Loss` 不再被开机段的 0 带偏，`computeMapPoints` 与 `computeAzimuth`
+也不再看到 `(0, 0)` 这个幻影顶点。控制台 `window.__repairReport` 会按组给出补了多少
+个点，`window.__rawData` 仍是解析后未被改动的原始值。
+
+上面这套规则由 [`tools/series-repair-test.html`](../../tools/series-repair-test.html)
+钉住，改完模块或管道顺序后用静态服务器打开重跑一遍。
 
 ### 3. 插值阶段 (data/interpolator.js)
 

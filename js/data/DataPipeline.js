@@ -62,13 +62,15 @@ class DataPipeline {
         window.__rawData = rawData;
         console.log('[Data][原始 raw] 解析完成（修补与插值前）:', rawData);
 
-        // 2. 空值就近修补：设备开机头几秒高程常记成 0，必须在插值前补掉，
-        //    否则逐秒插值会把 0 当真实样本，画出一条从海平面爬上来的假曲线
+        // 2. 空值修补：设备开机头几秒高程记 0、经纬度定不上（解析器统一写成 0），
+        //    必须在插值前补掉——否则插值把 0 当真实样本，高程会从海平面爬上来，
+        //    地图线会甩到 (0,0) 的几内亚湾。规则见 seriesRepair.js：
+        //    高程就近冻结，经纬度成对补且洞内直线桥接。
         if (onProgress) onProgress('repair');
         const repairReport = repairSparseSeries(rq);
         window.__repairReport = repairReport;
         if (repairReport.filled > 0 || repairReport.allMissing.length) {
-            console.log('[Data][修补 repair] 就近填充:', repairReport);
+            console.log('[Data][修补 repair] 空值组修补:', repairReport);
         }
 
         // 3. 逐秒插值
