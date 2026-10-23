@@ -20,10 +20,13 @@
  * 4) 缩放契约见 docs：Box.resizeChildren 会在每次改尺寸时「就地」把子元素的
  *    points/x/y/width/height 乘上 新÷旧，所以 build 只写设计坐标，
  *    update 每帧回写的位置要乘 resizeScale，且绝不能把 store 里的数组直接交给子元素。
- * 5) 右下角图标围绕「默认尺寸下的中心」放大缩小（iconNatural 是各图标 path 的
- *    自然包围盒，实测自 Leafer）。build 写设计坐标、update 每帧按当前缩放比重算，
- *    iconSize=1 时两处都精确回到升级前写死的 360/160（及其缩放值），默认观感不变；
- *    换图标记得同步改 iconNatural，写错只会让中心略偏，不会崩。
+ * 5) 右下角图标「贴在角上」+「绕中心缩放」。位置按距右/下边缘的固定留白算
+ *    （iconAnchorX/Y），不是宽度百分比 —— 否则面板拉宽后图标会漂到中间去；
+ *    留白由 400×200 反推，所以 ratio=2 时仍精确等于升级前写死的 360/160。
+ *    缩放走 Leafer 的 scale，其原点是元素左上角，所以直接调 scale 会让图标往右下角长
+ *    （用户反馈：应该绕中心）—— 见 iconNatural 与下面的 drift 注释，按倍率差把左上角
+ *    反向挪半个身位补回来，iconSize=1 时偏移为 0。换图标记得同步改 iconNatural，
+ *    写错只会让中心略偏，不会崩。
  * 6) 宽高比 ratio（1~8）可调，默认 2 就是原先写死的 400×200。约定：
  *    高度固定 CHART_H，设计宽 = CHART_H × ratio（1:1→200、1:8→1600）；
  *    刻度字号/线宽/圆点/虚线/内缩边距一律保持固定设计像素，不随比例缩放，
@@ -31,8 +34,13 @@
  *    预计算点始终铺在 400×200 的数据幅面里（fieldComputer 烘焙死了），所以绘图区
  *    映射要写成 plotInsets(W, H, padX, padY, CHART_W, CHART_H)，右边缘取 inset.x(CHART_W)
  *    而不是 inset.x(W) —— 漏掉这点，宽面板里的曲线只会占左边一小截。
- *    比例锚点用整数乘除（W * 9 / 10）而不是 0.9 * W：后者在 W=400 时给
- *    360.00000000000006，会破坏「默认观感逐位不变」。
+ *    比例锚点用整数乘除（W * 9 / 10）而不是 0.9 * W —— 实测在这个量级上两者是同一个
+ *    double（0.9 * 400 就是精确的 360，没有尾差），选它只为与老代码同形、不押注「这次
+ *    刚好相等」；默认观感逐位不变真正的凭据是断言锚点精确等于 360 / 160。
+ * 7) 当前值文本默认贴底（老款观感）；valueFollow 打开后改成跟随圆点下方。
+ *    这个开关只在 update() 里体现，build 输出的贴底 y 一个字节都不动，
+ *    所以默认（关）与升级前逐位一致；改开关靠 rebuildBoxChildren 触发的
+ *    updateFn 立刻刷当前帧，不需要额外重建分支。
  */
 import { resizeScale, plotInsets } from '../../utils/math.js';
 
@@ -43,11 +51,30 @@ export const CHART_W = 400, CHART_H = 200, CHART_PADX = 14, CHART_PADY = 18;
 export const RATIO_MIN = 1, RATIO_MAX = 8, RATIO_DEFAULT = 2;
 
 /**
- * 右下角图标在设计空间里的锚点比例（左上角位置 = W·9/10, H·8/10）。
- * 用整数乘除而不是 0.9 / 0.8：默认 400×200 下正好得到升级前写死的 360 / 160，
- * 换成小数乘法则会得到 360.00000000000006，破坏逐位一致。
+ * 右下角图标的锚点：按「距面板右/下边缘的固定留白」定位，而不是按宽度取百分比。
+ * 留白由默认幅面 400×200 反推，所以 ratio=2 时精确回到升级前写死的 360 / 160，逐位不变；
+ * 但面板拉宽到 1:8（1600×200）后，百分比锚点会把图标甩到 1440 —— 离右边缘还有 160px，
+ * 看着像在曲线中间而不是右下角。按边距锚点它才真的贴在角上。
+ * 乘除写成整数形式（CHART_W * 9 / 10）以与老代码同形；实测 0.9 * 400 同样是精确的 360，
+ * 所以这里不会有尾差 —— 校验页断言的是「锚点精确回到 360 / 160」这条硬指标。
  */
 const ICON_RX = 9, ICON_RY = 8;
+export const ICON_EDGE_X = CHART_W - CHART_W * ICON_RX / 10;  // 40
+export const ICON_EDGE_Y = CHART_H - CHART_H * ICON_RY / 10;  // 40
+
+/**
+ * 图标左上角的设计 x / y（贴右下角）。
+ * 绘图区右边缘 = inset.x(CHART_W) = W - CHART_PADX = W - 14，所以图标左上角恒在它左边
+ * 26 设计px（40 - 14）—— 与比例无关，宽面板里图标相对曲线区的位置跟 1:2 时完全一样，
+ * 只是不再跟着宽度往中间漂。
+ */
+export const iconAnchorX = W => W - ICON_EDGE_X;
+export const iconAnchorY = H => H - ICON_EDGE_Y;
+
+/** 当前值文本「贴底」时距底部标尺线的抬升量（升级前写死在 chartChildren 里的 16px） */
+const VALUE_BOTTOM_LIFT = 16;
+/** 「跟随当前点」时，文本左上角在圆点底部再往下留的白（设计px） */
+const VALUE_FOLLOW_GAP = 4;
 
 /**
  * 数字回落：缺省/空串/非数字一律退回老款写死的那个值。
@@ -153,6 +180,8 @@ export function chartDefaultConfig(o) {
         showDot: true,
         showIcon: true,
         showValue: true,
+        // 当前值位置：默认 false = 贴在底部标尺线上方（升级前唯一行为）
+        valueFollow: false,
         showArea: false,
         smooth: o.smoothDefault,
         // 尺寸类：全部等于老款写死的数值
@@ -216,6 +245,8 @@ export function chartSettings(o) {
         // —— 当前值文本（默认与刻度同色，所以面板显示的默认值取 rulerText，做到所见即所得）——
         { name: 'Value color', key: 'colors.valueText', type: 'color', defaultValue: chartDefaultConfig(o).colors.rulerText },
         { name: 'Value size', key: 'valueFontSize', type: 'number', min: 8, max: 60 },
+        // 关掉 = 贴在底部标尺线上方（升级前观感）；打开 = 文本左上角跟着圆点往下
+        { name: 'Value follows point', key: 'valueFollow', type: 'boolean' },
         // —— 角标图标 ——
         { name: 'Icon size', key: 'iconSize', type: 'number', min: 0.2, max: 4, step: 0.1 },
         ...(o.iconColorKey ? [{ name: 'Icon color', key: o.iconColorKey, type: 'color', defaultValue: o.lineColor }] : [])
@@ -339,7 +370,7 @@ export function chartChildren(o, config, data) {
         });
     }
 
-    // 6) 右下角图标：围绕「默认尺寸下的中心」放大缩小
+    // 6) 右下角图标：位置贴角（见 iconAnchorX/Y），缩放围绕「默认尺寸下的中心」
     //    Leafer 的 scale 以元素左上角为原点，所以直接调 scale 会让图标往右下角长
     //    （用户反馈：应该绕中心）。这里按倍率差把左上角反向挪半个身位补回来：
     //    挪动量 = 自然尺寸 × 默认缩放 × (倍率 - 1) ÷ 2，iconSize=1 时为 0，
@@ -347,8 +378,7 @@ export function chartChildren(o, config, data) {
     if (showIcon) {
         const [nw, nh] = o.iconNatural || [0, 0];
         const drift = (iconFactor - 1) * o.iconScale / 2;
-        // 锚点跟着设计宽走（图标始终贴在右侧约 90% 处），比例 2 时精确回到 360/160
-        const iconX = W * ICON_RX / 10, iconY = H * ICON_RY / 10;
+        const iconX = iconAnchorX(W), iconY = iconAnchorY(H);
         children.push({
             name: 'now_icon',
             tag: 'Rect', x: iconX - nw * drift, y: iconY - nh * drift,
@@ -356,10 +386,12 @@ export function chartChildren(o, config, data) {
         });
     }
 
-    // 7) 当前值文本：贴在进度线右侧，x 由 update() 跟随
+    // 7) 当前值文本：贴在进度线右侧，x 由 update() 跟随；
+    //    y 默认钉在底部标尺线上方，valueFollow 打开后由 update() 改成跟着圆点往下
+    //    （build 这边不分支，保证默认输出与升级前逐字节相同）
     if (showValue) {
         children.push({
-            name: 'now_text', tag: 'Text', resizeFontSize: true, x: 55, y: inset.y(H) - 16,
+            name: 'now_text', tag: 'Text', resizeFontSize: true, x: 55, y: inset.y(H) - VALUE_BOTTOM_LIFT,
             fontSize: valueFS, fontWeight: 'black', text: '--',
             fill: valueColor,
             textAlign: 'left', verticalAlign: 'middle'
@@ -406,17 +438,31 @@ export function chartUpdate(o, box, frameData, progress, ctx) {
     if (icon && o.iconNatural) {
         const [nw, nh] = o.iconNatural;
         const drift = (num(cfg.iconSize, 1) - 1) * o.iconScale / 2;
-        icon.x = W * ICON_RX / 10 * scale.x - nw * drift;
-        icon.y = CHART_H * ICON_RY / 10 * scale.y - nh * drift;
+        icon.x = iconAnchorX(W) * scale.x - nw * drift;
+        icon.y = iconAnchorY(CHART_H) * scale.y - nh * drift;
     }
 
     const i = ctx.currentFrame;
     if (pts.length > i * 2 + 1) {
-        const dx = inset.x(pts[i * 2]) * scale.x;
-        const dy = inset.y(pts[i * 2 + 1]) * scale.y;
+        const designX = inset.x(pts[i * 2]);
+        const designY = inset.y(pts[i * 2 + 1]);
+        const dx = designX * scale.x;
+        const dy = designY * scale.y;
         const line = byName('metrics');
         if (line) line.x = dx;
-        if (valueText) valueText.x = dx + 5 * scale.x;
+        if (valueText) {
+            valueText.x = dx + 5 * scale.x;
+            // 「跟随当前点」：左上角落在圆点下方（点 + 半径 + 留白）。
+            // 上限夹到贴底模式那条 y（inset.y(H) - 16）：点在曲线末尾、已经贴着底部标尺线时，
+            // 再往下挪整块文本就掉出面板了 —— 用户拿截图报的就是这类越界。
+            // 横向不夹：与贴底模式同样从进度线右侧 5px 起排，位置不比老版更靠边。
+            // 关掉开关时一个字节都不碰 y，保持 resizeChildren 已经写好的「build 贴底 y × scale」。
+            if (on(cfg.valueFollow, false)) {
+                const dotDiameter = num(cfg.dotSize, 13);
+                const wantY = designY + dotDiameter / 2 + VALUE_FOLLOW_GAP;
+                valueText.y = Math.min(wantY, inset.y(CHART_H) - VALUE_BOTTOM_LIFT) * scale.y;
+            }
+        }
         const dot = byName('now_dot');
         if (dot) { dot.x = dx; dot.y = dy; }
     }

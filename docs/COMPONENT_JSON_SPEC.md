@@ -98,6 +98,8 @@ Rules:
   the geometry.
 - Values equal to the default are omitted, so adding a setting never enlarges an
   untouched template, and a template stays valid when a definition gains new defaults.
+  A pure positioning switch (chart `valueFollow`, default `false` = the value text stays
+  bottom-pinned) is just such an ordinary config key: no geometry copy, no migration.
 - A setting that resizes the box is stored twice on purpose, and both copies agree: the
   chart `ratio` (1…8, default 2) goes into `config`, while the resulting `width`
   (`200 × ratio` at default height) is the top-level geometry field. Old templates have

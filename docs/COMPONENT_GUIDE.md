@@ -78,13 +78,15 @@ size the factory guessed:
 | `onSettingChange(box, key, value, config)` | `SettingsPanel._onPropertyChange()` and Studio `PropertyEditor._onStyleChange()`, *before* the value is applied | return `true` when it resized the box, so the rebuild that follows measures against the new size. Chart `ratio` sets `box.width = box.height × ratio` by **direct assignment** — never `box.resizeWidth()`: the wrapper carries `lockRatio: true`, so `resizeWidth` preserves the aspect and drags `height` with it (measured on the real Leafer canvas: `resizeWidth(1600)` on a 400×200 chart produced 1600×**800**, i.e. a uniform zoom instead of a wider chart). |
 
 Both hooks and the "default appearance is untouched" promise are pinned by
-[`tools/chart-ratio-test.html`](../tools/chart-ratio-test.html) — 99 assertions over
+[`tools/chart-ratio-test.html`](../tools/chart-ratio-test.html) — 159 assertions over
 `plotInsets` back-compatibility, the fixed-pixel internals at 1:1…1:8, the area clamp,
-and the marker alignment, plus 21 more that byte-compare `chartChildren()` /
+the marker alignment, the corner-pinned icon (its distance to the right edge stays 40
+design px at every ratio) and the `valueFollow` switch (bottom-pinned off, dot-chasing
+on, clamped inside the panel), plus 21 more that byte-compare `chartChildren()` /
 `chartUpdate()` against temporary HEAD copies (the page prints the `git show` commands;
-those 21 show up as "skipped" when the copies are absent, never as false passes). Run it
-on a static server whenever you touch `chartCommon.js`, `js/utils/math.js` or
-`factory.js`.
+those 21 show up as "skipped" when the copies are absent, never as false passes — with
+the copies present the page reports 180/180). Run it on a static server whenever you
+touch `chartCommon.js`, `js/utils/math.js` or `factory.js`.
 
 ### Settings control types
 
@@ -175,6 +177,18 @@ Practical rules learned from the shipped components:
   builds and measures against that box, so a wider chart is a wider plot rect rather
   than a stretched 400-wide one (`sx = sy`), and `update()` must recompute the same
   width from `box.__leaferConfig` before multiplying by `resizeScale()`.
+- Inside a resizable box, anchor things that must stay in a corner to the **edge**, not
+  to a percentage: the chart icon sits at `width - 40`, so it reads as "bottom-right"
+  at 1:1 and at 1:8 alike (a `0.9 × width` anchor put it 160 px off the edge once the
+  panel was widened). Derive the margin from the old literal — `CHART_W - CHART_W * 9/10`
+  is exactly 40, so the default box still gets 360 and parity is preserved by
+  construction, not by luck.
+- A setting that only changes where `update()` writes a child per frame (the charts'
+  `valueFollow`) does not need a `build()` branch at all. Leaving `build()` alone keeps
+  the default output byte-identical for free, and toggling it still repaints immediately,
+  because a non-layout key routes through `rebuildBoxChildren()`, which ends by calling
+  `updateFn(id, currentFrame)` — so the new position lands on the very next tick of the
+  panel, paused or not.
 - Use `data` (the whole `rq`) for anything static — totals, extremes, the point
   sets in `data._chartData`, the projected route in `data._mapPoints`. This is the
   only place you get the full series; `update()` sees one second.
@@ -253,7 +267,12 @@ top-left, so a corner icon grows toward the bottom-right; counter-translate its
 `x`/`y` by `(factor - 1) × naturalSize × defaultScale ÷ 2` in `build()`, then
 recompute the same offset against `resizeScale()` in `update()`, because a resize
 multiplies `x`/`y` but never `scale`. Both offsets are exactly zero at the default
-factor, which is what keeps old templates pixel-identical.
+factor, which is what keeps old templates pixel-identical. A third rule lives right
+next to them: an element that belongs in a corner is anchored by an **edge margin**
+(`width − 40`), never by a width percentage — a 90% anchor leaves it 160 px off the
+right edge once the chart is 1:8, which reads as "somewhere in the middle of the curve"
+rather than "in the corner", and the margin derived from the same 400-wide default is
+still exactly 360 there.
 
 Cost matters: `update()` runs once **per frame per component**, twice when the
 memory canvas is active, thousands of times during one export. No sorting, no
