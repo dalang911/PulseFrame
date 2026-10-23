@@ -24,14 +24,30 @@
  *    自然包围盒，实测自 Leafer）。build 写设计坐标、update 每帧按当前缩放比重算，
  *    iconSize=1 时两处都精确回到升级前写死的 360/160（及其缩放值），默认观感不变；
  *    换图标记得同步改 iconNatural，写错只会让中心略偏，不会崩。
+ * 6) 宽高比 ratio（1~8）可调，默认 2 就是原先写死的 400×200。约定：
+ *    高度固定 CHART_H，设计宽 = CHART_H × ratio（1:1→200、1:8→1600）；
+ *    刻度字号/线宽/圆点/虚线/内缩边距一律保持固定设计像素，不随比例缩放，
+ *    想更小用面板里已有的 Ruler text size / dot size 等设置项自己调。
+ *    预计算点始终铺在 400×200 的数据幅面里（fieldComputer 烘焙死了），所以绘图区
+ *    映射要写成 plotInsets(W, H, padX, padY, CHART_W, CHART_H)，右边缘取 inset.x(CHART_W)
+ *    而不是 inset.x(W) —— 漏掉这点，宽面板里的曲线只会占左边一小截。
+ *    比例锚点用整数乘除（W * 9 / 10）而不是 0.9 * W：后者在 W=400 时给
+ *    360.00000000000006，会破坏「默认观感逐位不变」。
  */
 import { resizeScale, plotInsets } from '../../utils/math.js';
 
 /** 设计绘图区尺寸与内缩边距（三个图表共用，放大后刻度线/圆点不越界） */
 export const CHART_W = 400, CHART_H = 200, CHART_PADX = 14, CHART_PADY = 18;
 
-/** 右下角图标左上角的设计锚点：升级前三个图表都是写死的这一对值，别动 */
-const ICON_X = 360, ICON_Y = 160;
+/** 宽高比量程：面板按 1:R，高度固定 200、宽度 = 200·R；默认 2 即原先写死的 400×200 */
+export const RATIO_MIN = 1, RATIO_MAX = 8, RATIO_DEFAULT = 2;
+
+/**
+ * 右下角图标在设计空间里的锚点比例（左上角位置 = W·9/10, H·8/10）。
+ * 用整数乘除而不是 0.9 / 0.8：默认 400×200 下正好得到升级前写死的 360 / 160，
+ * 换成小数乘法则会得到 360.00000000000006，破坏逐位一致。
+ */
+const ICON_RX = 9, ICON_RY = 8;
 
 /**
  * 数字回落：缺省/空串/非数字一律退回老款写死的那个值。
@@ -64,6 +80,55 @@ function pick(obj, path) {
 }
 
 /**
+ * 读宽高比：缺键 / 空串 / 非数字回到 2（= 升级前写死的 400×200），越界夹到 [1,8]。
+ * 必须夹：面板的数字输入被清空时 PropertyRenderer 会交上 0，
+ * 比例 0 会让设计宽变成 0、缩放比除零。
+ * 不做取整，允许 2.5 这类中间比例。
+ * @param {Object} config - 组件配置（读 config.ratio）
+ * @returns {number}
+ */
+export function chartRatio(config) {
+    const r = num(config && config.ratio, RATIO_DEFAULT);
+    return Math.min(RATIO_MAX, Math.max(RATIO_MIN, r));
+}
+
+/** 设计宽 = 固定高 × 比例；比例 2 时精确等于 CHART_W（400），默认观感不变 */
+export const chartDesignW = ratio => CHART_H * ratio;
+
+/**
+ * 组件的「设计（基准）尺寸」，供 factory 与 rebuildBoxChildren 计算缩放比。
+ * 定义上挂 `designSize: chartDesignSize` 即可让外框跟着比例走；不挂则沿用
+ * defaultConfig.width/height（其余 49 个组件都是这样，行为不变）。
+ * @param {Object} config - 合并后的组件配置
+ * @returns {{width:number, height:number}}
+ */
+export function chartDesignSize(config) {
+    return { width: chartDesignW(chartRatio(config)), height: CHART_H };
+}
+
+/**
+ * 比例键变更时把面板本身拉宽（高度不动、宽度 = 高度 × 比例）——
+ * 用户选的就是「高固定、宽度变大」，光重建子元素不够，外框得先跟上，
+ * 随后 rebuildBoxChildren 才会按「目标 / 设计」等比缩放（此时 sx = sy，不变形）。
+ * 只认 ratio 这一个键，其它设置项不碰 Box 尺寸。
+ * @param {Object} box - Leafer Box
+ * @param {string} key - 变更的设置项键
+ * @param {*} value - 新值
+ * @param {Object} config - 组件配置（同步写 width，别让 __leaferConfig.width 说谎）
+ * @returns {boolean} 是否处理了这个键
+ */
+export function chartApplyRatioChange(box, key, value, config) {
+    if (key !== 'ratio' || !box) return false;
+    const width = (box.height || CHART_H) * chartRatio({ ratio: value });
+    if (config) config.width = width;
+    // 必须直接赋值，不能用 box.resizeWidth()：Box 建的时候带 lockRatio: true，
+    // resizeWidth 会「保长宽比」把高度也一起改掉（实测 400×200 → 1600 会把高拉到 800），
+    // 那就成了等比放大而不是「高固定、宽变」。直接赋值只动宽，子元素随后整体重建。
+    box.width = width;
+    return true;
+}
+
+/**
  * 生成三个图表共用的默认配置
  * @param {Object} o - 组件差异点（见 chartChildren 的 opts 说明）
  */
@@ -71,6 +136,9 @@ export function chartDefaultConfig(o) {
     return {
         x: o.x,
         y: o.y,
+        // 宽高比默认 2；设计宽 = CHART_H × ratio，ratio=2 时正好是下面这对 400×200。
+        // 改了比例由 definition.designSize 给出真正的设计尺寸，factory 据此缩放子元素。
+        ratio: RATIO_DEFAULT,
         width: CHART_W,
         height: CHART_H,
         // 面板外观：默认透明底 + 无描边，等价升级前 Box 上这些键全部缺省的状态。
@@ -118,6 +186,8 @@ export function chartSettings(o) {
         { name: 'Border color', key: 'stroke', type: 'color', defaultValue: '#00000000' },
         { name: 'Border width', key: 'borderWidth', type: 'number', min: 0, max: 20 },
         { name: 'Corner radius', key: 'cornerRadius', type: 'number', min: 0, max: 60 },
+        // 宽高比 1:1 ~ 1:8（高度固定、宽度 = 高度 × 比例）。默认 2 = 升级前写死的 400×200
+        { name: 'Aspect ratio 1:N', key: 'ratio', type: 'number', min: RATIO_MIN, max: RATIO_MAX, step: 1 },
         // —— 图层开关 ——
         { name: 'Ruler lines', key: 'showRuler', type: 'boolean' },
         { name: 'Scale labels', key: 'showLabels', type: 'boolean' },
@@ -162,11 +232,15 @@ export function chartSettings(o) {
  * @param {Object} data - processedData（图表预计算点在其 _chartData 上）
  */
 export function chartChildren(o, config, data) {
-    const W = CHART_W, H = CHART_H;
+    // 设计高固定 200，设计宽随比例（ratio=2 → 400，与升级前逐位一致）
+    const H = CHART_H;
+    const W = chartDesignW(chartRatio(config));
     const chartData = (data && data._chartData) || {};
     const colors = config.colors || {};
     const sw = config.strokeWidth || {};
-    const inset = plotInsets(W, H, CHART_PADX, CHART_PADY);
+    // 数据点永远铺在 fieldComputer 烘焙的 400×200 幅面里，所以映射按 CHART_W/CHART_H
+    // 取数据幅面，右边缘是 inset.x(CHART_W) 而不是 inset.x(W)
+    const inset = plotInsets(W, H, CHART_PADX, CHART_PADY, CHART_W, CHART_H);
 
     // 与老款一致：量程用 `||` 回落（0 视为缺省），别换成 ??
     const maxV = chartData[o.maxKey] || o.maxDefault;
@@ -210,10 +284,10 @@ export function chartChildren(o, config, data) {
 
     // 1) 三条水平虚线标尺（顶线只给 x/y/width，中线和底线给 points —— 保持老款写法）
     if (showRuler) {
-        const rulerStyle = { tag: 'Line', lockRatio: true, width: inset.x(W) - inset.x(0), strokeWidth: num(sw.ruler, 5), stroke: rulerColor, dashPattern: [dash, dash] };
+        const rulerStyle = { tag: 'Line', lockRatio: true, width: inset.x(CHART_W) - inset.x(0), strokeWidth: num(sw.ruler, 5), stroke: rulerColor, dashPattern: [dash, dash] };
         children.push({ ...rulerStyle, x: inset.x(0), y: inset.y(0) });
-        children.push({ ...rulerStyle, points: [inset.x(0), inset.y(H / 2), inset.x(W), inset.y(H / 2)] });
-        children.push({ ...rulerStyle, points: [inset.x(0), inset.y(H), inset.x(W), inset.y(H)] });
+        children.push({ ...rulerStyle, points: [inset.x(0), inset.y(H / 2), inset.x(CHART_W), inset.y(H / 2)] });
+        children.push({ ...rulerStyle, points: [inset.x(0), inset.y(H), inset.x(CHART_W), inset.y(H)] });
     }
 
     // 2) Y 轴三个刻度文本（x 为负：贴在绘图区左侧外面）
@@ -237,7 +311,7 @@ export function chartChildren(o, config, data) {
     //       0.2px，直线段和曲线在视觉上重合，所以关掉平滑没有代价。
     if (showArea && pts.length >= 2) {
         const flat = inset.points(pts);
-        const x0 = inset.x(0), x1 = inset.x(W), y0 = inset.y(0), y1 = inset.y(H);
+        const x0 = inset.x(0), x1 = inset.x(CHART_W), y0 = inset.y(0), y1 = inset.y(H);
         for (let i = 0; i < flat.length; i += 2) {
             flat[i] = Math.min(x1, Math.max(x0, flat[i]));
             flat[i + 1] = Math.min(y1, Math.max(y0, flat[i + 1]));
@@ -273,9 +347,11 @@ export function chartChildren(o, config, data) {
     if (showIcon) {
         const [nw, nh] = o.iconNatural || [0, 0];
         const drift = (iconFactor - 1) * o.iconScale / 2;
+        // 锚点跟着设计宽走（图标始终贴在右侧约 90% 处），比例 2 时精确回到 360/160
+        const iconX = W * ICON_RX / 10, iconY = H * ICON_RY / 10;
         children.push({
             name: 'now_icon',
-            tag: 'Rect', x: ICON_X - nw * drift, y: ICON_Y - nh * drift,
+            tag: 'Rect', x: iconX - nw * drift, y: iconY - nh * drift,
             scale: iconScale, path: o.iconPath, fill: iconColor
         });
     }
@@ -311,8 +387,11 @@ export function chartUpdate(o, box, frameData, progress, ctx) {
     if (!children || !children.length) return;
 
     // 曲线由 resizeChildren 整体缩放，进度线/圆点/文本写的是「渲染像素」位置，需乘缩放比对齐
-    const scale = resizeScale(box, CHART_W, CHART_H);
-    const inset = plotInsets(CHART_W, CHART_H, CHART_PADX, CHART_PADY);
+    const cfg = box.__leaferConfig || {};
+    // 设计宽按当前比例算（与 chartChildren 同一个函数，两边永远对齐）
+    const W = chartDesignW(chartRatio(cfg));
+    const scale = resizeScale(box, W, CHART_H);
+    const inset = plotInsets(W, CHART_H, CHART_PADX, CHART_PADY, CHART_W, CHART_H);
     const chartData = ctx.chartData || {};
     const pts = chartData[o.pointsKey] || [];
     const byName = n => children.find(c => c && c.name === n);
@@ -326,9 +405,9 @@ export function chartUpdate(o, box, frameData, progress, ctx) {
     const icon = byName('now_icon');
     if (icon && o.iconNatural) {
         const [nw, nh] = o.iconNatural;
-        const drift = (num(box.__leaferConfig && box.__leaferConfig.iconSize, 1) - 1) * o.iconScale / 2;
-        icon.x = ICON_X * scale.x - nw * drift;
-        icon.y = ICON_Y * scale.y - nh * drift;
+        const drift = (num(cfg.iconSize, 1) - 1) * o.iconScale / 2;
+        icon.x = W * ICON_RX / 10 * scale.x - nw * drift;
+        icon.y = CHART_H * ICON_RY / 10 * scale.y - nh * drift;
     }
 
     const i = ctx.currentFrame;

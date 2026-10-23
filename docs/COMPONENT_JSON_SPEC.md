@@ -54,7 +54,7 @@ loader to use.
 | `id` | string | must match a registered definition (or a Studio spec id) |
 | `name` | string | display name, stored redundantly for readability |
 | `x`, `y` | number | top-left in canvas pixels |
-| `width`, `height` | number | box size; the factory builds at the definition's default geometry and then scales children to this size |
+| `width`, `height` | number | box size; the factory builds at the definition's *design* geometry — `defaultConfig.width/height`, or `designSize(config)` when the definition declares it (the three charts size their design width as `200 × ratio`) — and then scales children to this size |
 | `rotation` | number | degrees, default `0` |
 | `scale` | number | default `1` |
 | `customProps` | object | legacy positional style dump — see below |
@@ -98,6 +98,10 @@ Rules:
   the geometry.
 - Values equal to the default are omitted, so adding a setting never enlarges an
   untouched template, and a template stays valid when a definition gains new defaults.
+- A setting that resizes the box is stored twice on purpose, and both copies agree: the
+  chart `ratio` (1…8, default 2) goes into `config`, while the resulting `width`
+  (`200 × ratio` at default height) is the top-level geometry field. Old templates have
+  no `ratio` key, fall back to 2, and land back on exactly the 400×200 box they had.
 - Anything that cannot be `JSON.stringify`-ed (a Leafer instance, a cyclic object) is
   skipped rather than throwing.
 - On load, `mergeSavedConfig()` copies it into the overrides *before* `customProps`,

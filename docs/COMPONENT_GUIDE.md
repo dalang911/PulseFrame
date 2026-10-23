@@ -69,6 +69,23 @@ A definition may also set `isBackground: true` (fills the canvas, is *not*
 rescaled — see §5) or `lockAsBackground: true` (`editable = false`, so it cannot
 be dragged or selected by click, but a pointer hit still opens its settings).
 
+Two optional hooks let a component drive its own box instead of accepting whatever
+size the factory guessed:
+
+| Hook | Called by | Contract |
+|---|---|---|
+| `designSize(config)` | `factory.createComponent()` and `PropertyRenderer.rebuildBoxChildren()` | returns `{width, height}`: the design space `build()` lays children out in. Defaults to `defaultConfig.width/height`. The three charts return `{width: 200 × ratio, height: 200}`, so `ratio` (1…8) widens the plot rect without moving a single child coordinate. Keep it proportional to what the user sees: the factory scales by `target ÷ design` per axis, so a design size equal to the target means `sx = sy` and nothing is stretched. |
+| `onSettingChange(box, key, value, config)` | `SettingsPanel._onPropertyChange()` and Studio `PropertyEditor._onStyleChange()`, *before* the value is applied | return `true` when it resized the box, so the rebuild that follows measures against the new size. Chart `ratio` sets `box.width = box.height × ratio` by **direct assignment** — never `box.resizeWidth()`: the wrapper carries `lockRatio: true`, so `resizeWidth` preserves the aspect and drags `height` with it (measured on the real Leafer canvas: `resizeWidth(1600)` on a 400×200 chart produced 1600×**800**, i.e. a uniform zoom instead of a wider chart). |
+
+Both hooks and the "default appearance is untouched" promise are pinned by
+[`tools/chart-ratio-test.html`](../tools/chart-ratio-test.html) — 99 assertions over
+`plotInsets` back-compatibility, the fixed-pixel internals at 1:1…1:8, the area clamp,
+and the marker alignment, plus 21 more that byte-compare `chartChildren()` /
+`chartUpdate()` against temporary HEAD copies (the page prints the `git show` commands;
+those 21 show up as "skipped" when the copies are absent, never as false passes). Run it
+on a static server whenever you touch `chartCommon.js`, `js/utils/math.js` or
+`factory.js`.
+
 ### Settings control types
 
 `renderSettings()` (`js/ui/PropertyRenderer.js`) turns each `settings` entry into
@@ -153,6 +170,11 @@ Practical rules learned from the shipped components:
   `width`/`height` from your own `defaultConfig`: the factory builds at the default
   geometry and then resizes the box (scaling children), because the per-child
   coordinates you compute are not aware of the target size.
+- If the *design* size itself should follow a setting — the charts' `ratio` — declare
+  `designSize(config)` (§1) and design inside the size it returns. The factory then
+  builds and measures against that box, so a wider chart is a wider plot rect rather
+  than a stretched 400-wide one (`sx = sy`), and `update()` must recompute the same
+  width from `box.__leaferConfig` before multiplying by `resizeScale()`.
 - Use `data` (the whole `rq`) for anything static — totals, extremes, the point
   sets in `data._chartData`, the projected route in `data._mapPoints`. This is the
   only place you get the full series; `update()` sees one second.
@@ -249,10 +271,30 @@ The factory (`js/components/factory.js`) wraps your children in a `Box` with
 `lockRatio: true`, `resizeChildren: true`, `hitBox: true` and a `pointer.down`
 listener that emits `COMPONENT_SELECTED`. Then:
 
-1. `build()` is called with `defaultConfig.width/height` (background components get
-   the target size instead, and are laid out at full canvas size).
-2. The `Box` is resized to the target size, which scales the children.
+1. `build()` is called with the design size — `designSize(config).width/height` when
+   the definition declares it, otherwise `defaultConfig.width/height` (background
+   components get the target size instead, and are laid out at full canvas size).
+2. The `Box` is resized to the target size, which scales the children. The target is
+   `config.width/height` — except for `designSize` components created without an
+   explicit width/height (e.g. `addComponentToCanvas(id, {ratio: 8})`), where the
+   design size *is* the target; otherwise the two `lockRatio` resize calls below would
+   round-trip through the aspect lock.
 3. `box.__leaferConfig` stores the merged config for the property panel.
+
+Because the wrapper is created with `lockRatio: true`, `resizeWidth()`/`resizeHeight()`
+each preserve the aspect ratio, so a restore only lands exactly on a *proportional*
+target (measured: 800×100 for a 1600×200 design → exactly 800×100). A non-proportional
+`config.width/height` pair (800×300) comes back as 2400×300 — a long-standing quirk of
+this step, unrelated to `ratio`; drag handles keep the aspect, so it does not normally
+show up in the editor.
+
+Writing `box.width` / `box.height` directly *does* bypass the aspect lock, but it does
+not scale anything either: on the live canvas a 400×200 chart assigned to 800×300 kept
+its children at `x` 14…386, ruler width 372 and icon `x` 360 — only the frame moved.
+`resizeChildren` reacts to the `resize*()` API, not to plain property writes. That is
+why `ratio` goes through `onSettingChange` (direct `box.width`, no aspect drift) and
+then relies on the panel re-running `build()` for the new design width; if you take the
+same route for another setting, make sure a rebuild follows.
 
 Only the differences from `defaultConfig` are serialised into a template. Your
 semantic settings go into `components[i].config` (`js/utils/configDiff.js`); the older

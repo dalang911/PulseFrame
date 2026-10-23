@@ -537,9 +537,13 @@ export function rebuildBoxChildren(box, definition, config, data, updateFn, curr
         // 目标尺寸 = Box 当前实际尺寸（用户可能已拖拽改过；__leaferConfig.width 是创建时的旧值，不可信）
         const targetW = box.width;
         const targetH = box.height;
-        // 基准（默认）尺寸：子元素内部坐标大多按此设计
-        const defW = definition.defaultConfig?.width || config.width || 200;
-        const defH = definition.defaultConfig?.height || config.height || 100;
+        // 基准（默认）尺寸：子元素内部坐标大多按此设计；声明了 designSize(config) 的
+        // 组件按配置算出真正的设计尺寸（图表宽高比 ratio 走这条路），与 factory 保持一致
+        const design = typeof definition.designSize === 'function'
+            ? (definition.designSize(config) || {})
+            : {};
+        const defW = design.width || definition.defaultConfig?.width || config.width || 200;
+        const defH = design.height || definition.defaultConfig?.height || config.height || 100;
         // 背景层按目标尺寸直接铺满（build 读 config.width），其它组件按默认几何构建后再等比缩放
         const baseW = isBg ? targetW : defW;
         const baseH = isBg ? targetH : defH;

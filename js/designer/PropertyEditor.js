@@ -165,6 +165,12 @@ class PropertyEditor {
      */
     _onStyleChange(key, value) {
         if (!this._currentConfig) return;
+        // 与主编辑器一致：某些设置项会顺带改外框（图表 ratio：高不变、宽 = 高 × 比例）。
+        // 设计器不重建子元素，所以这里是拉伸预览，导出/重新载入后按新设计尺寸重建。
+        const def = this._currentDefinition;
+        if (def && typeof def.onSettingChange === 'function') {
+            def.onSettingChange(this._currentBox, key, value, this._currentConfig);
+        }
         setNestedValue(this._currentConfig, key, value);
     }
 

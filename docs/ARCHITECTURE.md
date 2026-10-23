@@ -148,9 +148,9 @@ Details of the resulting structure are in [DATA_SCHEMA.md](DATA_SCHEMA.md).
 | Module | API |
 |---|---|
 | `registry.js` | `register(def)`, `registerAll(defs)`, `get(id)`, `has(id)`, `getAll()`, `getByCategory(cat)`, `getCategories()`, `getIds()` |
-| `factory.js` | `createComponent(id, overrides)` → Leafer children; `addComponentToCanvas`, `removeComponentFromCanvas`, `clearAllComponents`, `initBackgroundLayer`, `resizeBackground` |
+| `factory.js` | `createComponent(id, overrides)` → Leafer children (the design size it builds and scales against comes from the definition's optional `designSize(config)`, else `defaultConfig.width/height`); `addComponentToCanvas`, `removeComponentFromCanvas`, `clearAllComponents`, `initBackgroundLayer`, `resizeBackground` |
 | `updater.js` | `updateAllComponents(frame, updateMemory)`, `updateComponent(id, frame)` |
-| `definitions/` | one file per component, or a group exported as an array (`gaugePanels.js`, `lapPanels.js`, …) registered through `definitions/index.js`; siblings that differ only in a few constants can share a helper module (`chartCommon.js` supplies the settings list, `build()` and `update()` for all three line charts) |
+| `definitions/` | one file per component, or a group exported as an array (`gaugePanels.js`, `lapPanels.js`, …) registered through `definitions/index.js`; siblings that differ only in a few constants can share a helper module (`chartCommon.js` supplies the settings list, `build()` and `update()` for all three line charts, plus their `designSize()`/`onSettingChange()` pair that turns the `ratio` setting into a 1:1…1:8 aspect ratio) |
 | `visual/` | components authored in Studio: JSON specs rather than code |
 | `visual/loader.js` | `loadLocalComponents()` (browser storage, ids prefixed `studio_comp_`), `loadRemoteComponents()` (store), `loadCustomComponents()` (both) |
 
@@ -189,7 +189,7 @@ unaffected. Tile-provider attribution obligations are listed in
 | `TemplateLibrary.js` | **Native** templates shipped with the app |
 | `TemplateManager.js` | **Local** templates in browser storage (v1 `frameConfig_*` entries are still readable) |
 | `TemplateShop.js` | **Shared** templates from the store; renders `thumbnail` through `safeThumb()` and every text field through `escapeHtml()` |
-| `SettingsPanel.js`, `PropertyRenderer.js` | Panels generated from a component's `settings` declaration |
+| `SettingsPanel.js`, `PropertyRenderer.js` | Panels generated from a component's `settings` declaration. A change runs `definition.onSettingChange(box, key, value, config)` first (a component may resize its own box — the chart `ratio` widens it), then `applyPropertyChange()`; non-layout keys end in `rebuildBoxChildren()`, which re-derives the design size from `designSize(config)` and rebuilds the children against the current box size |
 | `CustomComponentPanels.js` | **Local** and **Shared** component palettes |
 | `WidgetPicker.js`, `AlignTools.js`, `CanvasResizer.js`, `VideoPanel.js`, `UnitConfigDialog.js` | editing affordances |
 

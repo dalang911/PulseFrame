@@ -153,6 +153,18 @@ const allDefinitions = [
 | `settings` | array | - | 设置项定义（自动生成面板） |
 | `build(config, data)` | function | ✅ | 创建 Leafer 子元素 |
 | `update(config, frameData, progress)` | function | ✅ | 逐帧更新 |
+| `designSize(config)` | function | - | 返回 `{width, height}`：声明「设计幅面」随配置变化（三个图表就靠它把 `ratio` 变成宽 = 200×比例、高固定 200）。不声明时取 `defaultConfig.width/height` |
+| `onSettingChange(box, key, value, config)` | function | - | 面板改设置项时先问组件要不要动外框，动了返回 `true`（图表的 `ratio` 就是在这里把 `box.width` 直接改成 高×比例）。紧接着面板会重跑 `build()` |
+
+`designSize` 与 `factory.js` 的关系：创建 Box 时「目标尺寸 ÷ 设计尺寸」就是子元素的缩放比，
+所以设计尺寸要按当前配置算 —— 比例变了就让设计宽一起变，两个轴的缩放比才能保持相等
+（`sx = sy`），内容不会被拉变形。
+
+这两个钩子和「默认观感一点不变」都由 [`tools/chart-ratio-test.html`](../../tools/chart-ratio-test.html)
+钉住：99 条断言覆盖 `plotInsets` 向后兼容、1:1~1:8 下内部元素保持固定像素、面积不越界、
+游标与曲线对齐；另有 21 条是跟临时 HEAD 副本逐字节比 `chartChildren()` / `chartUpdate()`
+（副本的生成命令写在页首，缺副本时这 21 条显示为「跳过」，不会伪造通过）。改
+`chartCommon.js`、`js/utils/math.js`、`factory.js` 的缩放契约后都要重跑。
 
 ### settings 项类型
 
@@ -222,3 +234,5 @@ const allDefinitions = [
 7. **子元素顺序**：`build()` 返回的顺序就是绘制顺序（后面的盖在前面的上面，所以高程图的面积填充排在曲线之前），顺序不能随意重排。图层开关靠「不生成这个子元素」实现（`lapPanels.js`、`chartCommon.js` 都是这样），默认全部开启时生成的列表要和加开关之前完全一致，老模板才像素不变；一旦有元素可能缺席，`update()` 就按 `name` 取，别按下标
 8. **面积填充别交给 `curve`**：闭合多边形一旦被 Leafer 平滑，底边那条横跨绘图区的长线段会被两端切线拽出波浪、鼓到标尺以外（用户反馈过的「Area 背景色跑到外面」）。`chartCommon.js` 里面积一律用直线段，并且顶点先夹进 `[x0,x1]×[y0,y1]`；数据点密到每段不到 0.2px，直线段和曲线在视觉上重合，关掉平滑没有代价
 9. **`scale` 类图标要绕中心缩放得自己补位**：Leafer 的 `scale` 以元素左上角为原点，直接调倍率图标会往右下角长。`chartCommon.js` 的做法是 `build()` 按 `(倍率-1)` 反向挪左上角、`update()` 再按当前缩放比重算一次（`resizeChildren` 只乘 `x/y` 不乘 `scale`），偏移量在 `iconSize=1` 时精确为 0，所以默认位置和升级前逐位相同。代价是各组件要在 `iconNatural` 里存自己 path 的自然包围盒（实测自 Leafer），换图标记得同步改
+10. **改外框别用 `resizeWidth()`**：Box 建的时候带 `lockRatio: true`，`resizeWidth()`/`resizeHeight()` 都会「保长宽比」把另一个轴一起改掉（实测 400×200 的图表 `resizeWidth(1600)` 会变成 1600×**800**，是等比放大而不是拉宽）。图表 `ratio` 走 `onSettingChange`：直接赋值 `box.width = 高 × 比例`，只动宽。注意直接赋值**不会**缩放子元素（实测把 400×200 直接写成 800×300，曲线仍是 14…386、标尺宽仍 372、角标 x 仍 360，只有外框动了），所以后面必须紧跟一次 `rebuildBoxChildren()` 按新设计宽重跑 `build()` —— 面板改非布局键本来就会重建，这条链是现成的
+11. **模板恢复只对等比目标精确**：`factory.js` 恢复尺寸是 `resizeWidth(目标宽)` + `resizeHeight(目标高)` 两步，在 `lockRatio` 下第二步会按第二步的比例再乘一次。等比目标没问题（1600×200 的设计恢复成 800×100 实测正好），非等比（800×300）实测会落到 2400×300。这是 `ratio` 之前就存在的老行为，拖拽手柄本身保比例所以平时碰不到；真要非等比就别走这条恢复链

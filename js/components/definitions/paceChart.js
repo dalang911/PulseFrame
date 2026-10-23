@@ -4,7 +4,7 @@
  */
 import { speedToPace } from '../../utils/format.js';
 import { run_icon } from '../../utils/icons.js';
-import { chartDefaultConfig, chartSettings, chartChildren, chartUpdate } from './chartCommon.js';
+import { chartDefaultConfig, chartSettings, chartChildren, chartUpdate, chartDesignSize, chartApplyRatioChange } from './chartCommon.js';
 
 const OPTS = {
     title: 'Pace Chart',
@@ -38,6 +38,9 @@ export default {
     defaultConfig: chartDefaultConfig(OPTS),
     dataBindings: ['speed'],
     settings: chartSettings(OPTS),
+    // 宽高比可调（1:1 ~ 1:8）：设计尺寸随比例走，改比例时把面板拉宽（高度不动）
+    designSize: chartDesignSize,
+    onSettingChange: chartApplyRatioChange,
 
     build(config, data) {
         return chartChildren(OPTS, config, data);

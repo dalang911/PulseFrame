@@ -239,6 +239,13 @@ class SettingsPanel {
      * 属性变更回调 → 应用到 Box 并刷新当前帧
      */
     _onPropertyChange(key, value) {
+        // 组件可以先按新值调整外框（图表的 ratio：高度不动、宽度 = 高度 × 比例），
+        // 再走 applyPropertyChange —— 它随后触发的重建会以新的 box 尺寸为 targets
+        const def = registry.get(this._currentComponentId);
+        if (def && typeof def.onSettingChange === 'function') {
+            def.onSettingChange(this._currentBox, key, value, this._currentConfig);
+        }
+
         applyPropertyChange(
             this._currentBox,
             key,

@@ -238,6 +238,12 @@ Each point set is an array of `{ x, y }` in a **400 px-wide normalised space**
 re-deriving coordinates. `baseAltitude` is the first valid altitude, used to keep
 elevation axes from floating when a file has no sea-level reference.
 
+The baked extent stays **400×200 no matter how the chart is displayed**: the polyline
+charts map it into whatever plot rect they currently have
+(`plotInsets(W, H, padX, padY, 400, 200)` in `chartCommon.js`), so the `ratio` setting
+(design width = `200 × ratio`, 1…8) only changes the target box — never these numbers.
+Same array, same frame index, at every ratio.
+
 The `zh_*` / `o2o_*` / `ele18_*` families exist because different presets draw the
 elevation profile in different projections (per-km bars, 1:1 scale, 18×
 exaggeration). They are the same data, re-mapped — not different measurements.

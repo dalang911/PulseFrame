@@ -66,12 +66,25 @@ export function createComponent(componentId, configOverrides = {}) {
     // 交互拖拽改尺寸时靠 Box.resizeChildren 运行时缩放子元素，但该缩放不回写 build，
     // 因此载入模板/恢复时：先按默认尺寸构建子元素，再 resize 到目标尺寸等比缩放子元素，
     // 复现拖拽后的效果（否则外框变了、里面的成员宽高不变）。背景层按目标尺寸直接铺满，不缩放。
-    const defW = definition.defaultConfig?.width || config.width || 200;
-    const defH = definition.defaultConfig?.height || config.height || 100;
-    const targetW = config.width || defW;
-    const targetH = config.height || defH;
+    // 设计（基准）尺寸：默认取 definition.defaultConfig；声明了 designSize(config) 的组件
+    // 可以按配置算出真正的设计尺寸（图表的宽高比 ratio 就是这么生效的），
+    // 让「目标 ÷ 设计」的缩放比保持 sx = sy，内容不会被拉变形。
+    const isDerived = typeof definition.designSize === 'function';
+    const design = isDerived ? (definition.designSize(config) || {}) : {};
+    const defW = design.width || definition.defaultConfig?.width || config.width || 200;
+    const defH = design.height || definition.defaultConfig?.height || config.height || 100;
+    // 声明了 designSize 的组件（图表的 ratio）：调用方没显式给宽/高时，目标就是设计尺寸本身。
+    // 不能拿 defaultConfig 里那个历史 width 当目标——实测只传 {ratio:8} 时它是 400，
+    // 于是下面的 resizeWidth(400) + resizeHeight(200) 会在 lockRatio 下往返一圈，
+    // 高度恰好等于设计高时才侥幸回到 1600，一旦高度不是 200 就算出错的宽（变成 2400）。
+    const targetW = isDerived && configOverrides.width == null ? defW : (config.width || defW);
+    const targetH = isDerived && configOverrides.height == null ? defH : (config.height || defH);
     const baseW = isBg ? targetW : defW;
     const baseH = isBg ? targetH : defH;
+    // 让 __leaferConfig 别对外说谎：外框宽按设计尺寸走了，config.width 也要跟上
+    // （ratio 2 时两者都是 400，默认观感与老配置完全一致）
+    if (isDerived && configOverrides.width == null) config.width = baseW;
+    if (isDerived && configOverrides.height == null) config.height = baseH;
 
     // 调用 build 函数获取 children（背景按目标尺寸，其它按默认几何）
     const children = definition.build({ ...config, width: baseW, height: baseH }, store.get('processedData'));

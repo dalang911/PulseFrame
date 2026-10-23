@@ -3,7 +3,7 @@
  * 布局与设置项统一走 chartCommon（折线类图表三个组件共用一份实现）
  */
 import { heart_icon } from '../../utils/icons.js';
-import { chartDefaultConfig, chartSettings, chartChildren, chartUpdate } from './chartCommon.js';
+import { chartDefaultConfig, chartSettings, chartChildren, chartUpdate, chartDesignSize, chartApplyRatioChange } from './chartCommon.js';
 
 const OPTS = {
     title: 'Heart Chart',
@@ -40,6 +40,9 @@ export default {
     defaultConfig: chartDefaultConfig(OPTS),
     dataBindings: ['heart_rate'],
     settings: chartSettings(OPTS),
+    // 宽高比可调（1:1 ~ 1:8）：设计尺寸随比例走，改比例时把面板拉宽（高度不动）
+    designSize: chartDesignSize,
+    onSettingChange: chartApplyRatioChange,
 
     build(config, data) {
         return chartChildren(OPTS, config, data);

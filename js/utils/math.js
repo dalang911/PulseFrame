@@ -21,20 +21,27 @@ export function resizeScale(box, defW, defH) {
 }
 
 /**
- * 折线图绘图区内缩：把设计坐标 [0,W]x[0,H] 线性映射到留边距后的
+ * 折线图绘图区内缩：把数据坐标 [0,dataW]x[0,dataH] 线性映射到留边距后的
  * [padX, W-padX] x [padY, H-padY]。
  * Box 带 resizeChildren 时按左上角等比缩放，若绘图内容铺满到 0/W、0/H，
  * 线宽/圆头/圆点半径会跨出边界，放大后越界更明显。内缩后四周留白随缩放
  * 同比放大，刻度线/曲线/圆点始终落在框内。
- * @param {number} W - 设计宽
- * @param {number} H - 设计高
+ *
+ * dataW / dataH 是「数据点数组本身铺开的幅面」，与外框设计尺寸可以不同：
+ * 图表的预计算点是按固定 400×200 烘焙的（见 fieldComputer.computeChartPoints），
+ * 而面板宽高比可调（chartCommon 的 ratio），设计宽会拉到 200×R。不传这两个
+ * 参数时默认等于 W/H，行为与旧版逐位一致。
+ * @param {number} W - 设计宽（外框）
+ * @param {number} H - 设计高（外框）
  * @param {number} padX - 左右内缩（设计px）
  * @param {number} padY - 上下内缩（设计px）
+ * @param {number} [dataW=W] - 数据 x 的实际幅面
+ * @param {number} [dataH=H] - 数据 y 的实际幅面
  * @returns {{x:Function, y:Function, points:Function}}
  */
-export function plotInsets(W, H, padX, padY) {
-    const sx = (W - 2 * padX) / W;
-    const sy = (H - 2 * padY) / H;
+export function plotInsets(W, H, padX, padY, dataW = W, dataH = H) {
+    const sx = (W - 2 * padX) / dataW;
+    const sy = (H - 2 * padY) / dataH;
     return {
         x: v => padX + v * sx,
         y: v => padY + v * sy,

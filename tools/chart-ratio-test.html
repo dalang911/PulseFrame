@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>chartCommon 宽高比（1:1~1:8）校验</title>
+<style>
+  body { font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; margin: 24px; background: #fafafa; color: #222; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  .note { color: #666; font-size: 12px; margin-bottom: 14px; }
+  #summary { font-weight: bold; font-size: 16px; padding: 8px 12px; border-radius: 6px; display: inline-block; margin-bottom: 14px; }
+  #summary.pass { background: #e6f7ed; color: #1b7a3d; }
+  #summary.fail { background: #fdecaa; color: #a33; }
+  .case { margin: 0 0 12px; border: 1px solid #e3e3e3; border-radius: 6px; background: #fff; }
+  .case > h2 { font-size: 14px; margin: 0; padding: 8px 12px; background: #f2f2f2; border-bottom: 1px solid #e3e3e3; }
+  .row { display: flex; gap: 8px; padding: 5px 12px; border-bottom: 1px dashed #eee; font-size: 13px; }
+  .row:last-child { border-bottom: none; }
+  .row.ok .mark { color: #1b7a3d; }
+  .row.bad { background: #fff5f5; }
+  .row.bad .mark { color: #c22; font-weight: bold; }
+  .row.skip { background: #fcfcfc; color: #999; }
+  .row.skip .mark { color: #bbb; }
+  .exp { color: #777; margin-left: auto; font-family: Consolas, monospace; font-size: 12px; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>chartCommon 宽高比（1:1 ~ 1:8）校验</h1>
+<p class="note">
+  防漂移页：三个折线图表（心率 / 配速 / 高程）新增 <code>ratio</code> 设置项后的两条底线 ——
+  ① 默认（ratio 缺省或 2）渲染结果与线上版本<strong>逐字节相同</strong>；
+  ② 比例只拉宽设计空间（高固定 200、宽 = 200·R、内部字号线宽圆点不跟着缩），
+  曲线仍然铺满绘图区、角标仍在 90% 宽处、<code>update()</code> 每帧写的游标位置和曲线对齐。
+  改 <code>chartCommon.js</code> / <code>utils/math.js</code> / <code>factory.js</code> 的缩放契约后，
+  用静态服务器打开本页重跑：<code>python -m http.server 8123</code> →
+  <code>http://127.0.0.1:8123/tools/chart-ratio-test.html</code>。
+  其中「与线上逐字节相同」那几项依赖两个临时 HEAD 副本（本页跑完就删掉了，不参与提交），需要时先在仓库根生成：
+  <code>git show HEAD:js/components/definitions/chartCommon.js &gt; js/components/definitions/_prev_chartCommon.js</code>
+  （把副本里那句 <code>from '../utils/math.js'</code> 改成 <code>'../../utils/_prev_math.js'</code>）和
+  <code>git show HEAD:js/utils/math.js &gt; js/utils/_prev_math.js</code>；
+  副本不在时这些项显示成「− 跳过」，不会伪造通过。
+</p>
+<div id="summary">运行中…</div>
+<div id="cases"></div>
+
+<script type="module">
+const results = [];
+const groups = [];
+function check(name, expected, actual) {
+    const ok = JSON.stringify(expected) === JSON.stringify(actual);
+    results.push({ name, ok, expected, actual });
+    return ok;
+}
+/** 把 from 之后产生的断言归到一个分组里，便于渲染 */
+function markGroup(title, from) {
+    const rows = [];
+    for (let i = from; i < results.length; i++) { results[i].grouped = true; rows.push(results[i]); }
+    groups.push({ title, rows });
+}
+/** 断言没跑（缺少线上副本）：记为跳过，渲染成 - 且不计入失败 */
+function skip(name, why) {
+    results.push({ name, ok: null, skipped: why });
+    return false;
+}
+
+/* ---------- 被测模块 + 线上（HEAD）副本，做逐字节 A/B ---------- */
+const cur = await import('../js/components/definitions/chartCommon.js');
+const mathCur = await import('../js/utils/math.js');
+// HEAD 副本是临时文件，跑完 A/B 就会删掉；缺了只影响 A / B 两组的逐字节比对，
+// 其余分组（比例本身的行为）照常跑，用 skip 明确标出来而不是伪造通过。
+let prev = null, mathPrev = null;
+try {
+    prev = await import('../js/components/definitions/_prev_chartCommon.js');
+    mathPrev = await import('../js/utils/_prev_math.js');
+} catch (e) { /* 副本不存在 → 走 skip 分支 */ }
+const prevMissing = !prev || !mathPrev;
+const PREV_HOWTO = '需要 A/B 时按页首说明生成两个 _prev_* 副本再重跑本页';
+const heartDef = (await import('../js/components/definitions/heartChart.js')).default;
+const paceDef = (await import('../js/components/definitions/paceChart.js')).default;
+const eleDef = (await import('../js/components/definitions/elevationChart.js')).default;
+
+const OPTS = {
+    title: 'Elevation Chart', lineLabel: 'Elevation', x: 80, y: 350,
+    lineColor: '#8B4513', areaColor: 'rgba(139,69,19,0.3)',
+    iconPath: 'M0,0 L10,0 L10,10 z', iconScale: 0.04, iconNatural: [896, 640],
+    iconColorKey: 'colors.icon', pointsKey: 'pt_ele_points',
+    maxKey: 'eleMax', minKey: 'eleMin', maxDefault: 100, minDefault: 0,
+    smoothDefault: false, flatCornerRadius: 1,
+    formatLabel: v => String(Math.round(v)),
+    formatValue: f => String(Math.round(f.altitude || 0))
+};
+
+// 预计算点：fieldComputer 把数据烘焙在 400×200 幅面里（x 左到右、y 已翻转 200-y）
+const N = 21;
+const pts = [];
+for (let i = 0; i < N; i++) {
+    const x = (400 / (N - 1)) * i;
+    const y = 200 - (i % 2 ? 30 : 170) - i;   // 故意让某些点贴边甚至越界
+    pts.push(+x.toFixed(6), +y.toFixed(6));
+}
+const DATA = { _chartData: { pt_ele_points: pts, eleMax: 200, eleMin: 10 } };
+const FRAME = { altitude: 123.4, heart_rate: 99, speed: 12 };
+
+const CONFIGS = [
+    ['默认（老模板没有 ratio 键）', (() => { const c = { ...cur.chartDefaultConfig(OPTS) }; delete c.ratio; return c; })()],
+    ['ratio 缺省 + 面积填充 + 平滑', (() => { const c = cur.chartDefaultConfig(OPTS); c.showArea = true; c.smooth = true; return c; })()],
+    ['全图层 + 自定义字号/线宽/圆点/图标倍率', (() => {
+        const c = cur.chartDefaultConfig(OPTS);
+        Object.assign(c, { showArea: true, smooth: true, dashSize: 4, labelFontSize: 26, valueFontSize: 33, dotSize: 9, iconSize: 2.3 });
+        c.colors = { ...c.colors, line: '#123456', area: 'rgba(1,2,3,0.5)', ruler: '#654321', rulerText: '#abcdef', progress: '#f0f0f0', dot: '#111111', icon: '#222222', valueText: '#333333' };
+        c.strokeWidth = { ruler: 2, line: 7, progress: 1 };
+        return c;
+    })()]
+];
+
+/* ================= A. plotInsets 的新默认参数不改变旧行为 ================= */
+if (prevMissing) {
+    const before = results.length;
+    skip('A. plotInsets 向后兼容：整组跳过', PREV_HOWTO);
+    markGroup('A. plotInsets 向后兼容', before);
+} else {
+    const before = results.length;
+    const vals = [0, 50, 137, 400, 400.5];
+    vals.forEach(v => {
+        const a = mathPrev.plotInsets(400, 200, 14, 18);
+        const b = mathCur.plotInsets(400, 200, 14, 18);
+        check(`plotInsets 默认参数：x(${v}) 与旧实现一致`, a.x(v), b.x(v));
+        check(`plotInsets 默认参数：y(${v}) 与旧实现一致`, a.y(v), b.y(v));
+        check(`plotInsets 默认参数：points([${v},${v}]) 与旧实现一致`, a.points([v, v]), b.points([v, v]));
+    });
+    // 显式传数据幅面 = 设计幅面时也必须一致
+    const a = mathPrev.plotInsets(400, 200, 14, 18);
+    const b = mathCur.plotInsets(400, 200, 14, 18, 400, 200);
+    check('plotInsets 显式 dataW/dataH 等于 W/H 时一致', a.points(pts), b.points(pts));
+    markGroup('A. plotInsets 向后兼容', before);
+}
+
+/* ================= B. 默认观感逐字节不变（与 HEAD 版 chartChildren A/B） ================= */
+{
+    const before = results.length;
+    if (prevMissing) {
+        skip('chartChildren 与线上逐字节相同（3 个配置）：整组跳过', PREV_HOWTO);
+    } else {
+        CONFIGS.forEach(([label, cfg]) => {
+            check(`chartChildren 与线上逐字节相同：${label}`,
+                JSON.stringify(prev.chartChildren(OPTS, cfg, DATA)),
+                JSON.stringify(cur.chartChildren(OPTS, cfg, DATA)));
+        });
+    }
+    // ratio 显式写成 2 也必须等于缺省
+    const withTwo = { ...CONFIGS[2][1], ratio: 2 };
+    check('chartChildren：ratio=2 与缺省同字节',
+        JSON.stringify(cur.chartChildren(OPTS, CONFIGS[2][1], DATA)),
+        JSON.stringify(cur.chartChildren(OPTS, withTwo, DATA)));
+    if (prevMissing) {
+        skip('chartChildren：ratio=2 与线上（HEAD）同字节：跳过', PREV_HOWTO);
+    } else {
+        check('chartChildren：ratio=2 与线上（HEAD）同字节',
+            JSON.stringify(prev.chartChildren(OPTS, CONFIGS[2][1], DATA)),
+            JSON.stringify(cur.chartChildren(OPTS, withTwo, DATA)));
+    }
+    markGroup('B. 默认观感不变（A/B 线上版本）', before);
+}
+
+/* ================= C. 比例解析与夹取 ================= */
+{
+    const before = results.length;
+    check('ratio 缺省 → 2', 2, cur.chartRatio({}));
+    check('ratio=null → 2', 2, cur.chartRatio({ ratio: null }));
+    check('ratio=NaN → 2', 2, cur.chartRatio({ ratio: NaN }));
+    check('ratio="" → 2', 2, cur.chartRatio({ ratio: '' }));
+    check('ratio=0 → 夹到 1', 1, cur.chartRatio({ ratio: 0 }));
+    check('ratio=-5 → 夹到 1', 1, cur.chartRatio({ ratio: -5 }));
+    check('ratio=20 → 夹到 8', 8, cur.chartRatio({ ratio: 20 }));
+    check('ratio="3" → 3（面板可能给字符串）', 3, cur.chartRatio({ ratio: '3' }));
+    check('ratio=2.5 → 保留小数', 2.5, cur.chartRatio({ ratio: 2.5 }));
+    check('chartRatio(undefined) 不崩', 2, cur.chartRatio(undefined));
+    [1, 2, 3, 4, 5, 6, 7, 8].forEach(r => {
+        check(`designSize(ratio=${r}) = 高固定、宽 200×R`, { width: 200 * r, height: 200 }, cur.chartDesignSize({ ratio: r }));
+    });
+    check('designSize 缺省 = 400×200', { width: 400, height: 200 }, cur.chartDesignSize({}));
+    check('defaultConfig 带 ratio=2 且宽 400（老模板 diff 不会写入 ratio）',
+        [2, 400, 200], [cur.chartDefaultConfig(OPTS).ratio, cur.chartDefaultConfig(OPTS).width, cur.chartDefaultConfig(OPTS).height]);
+    markGroup('C. 比例解析 / 夹取 / 设计尺寸', before);
+}
+
+/* ================= D. 宽面板里几何确实跟着比例走 ================= */
+const byName = (list, n) => list.find(c => c.name === n);
+function rulerTops(list) {
+    const lines = list.filter(c => c.tag === 'Line' && Array.isArray(c.points) && c.points.length === 4);
+    return lines.map(l => l.points);
+}
+{
+    const before = results.length;
+    const base = cur.chartDefaultConfig(OPTS);
+    [1, 2, 4, 8].forEach(r => {
+        const W = 200 * r;
+        const list = cur.chartChildren(OPTS, { ...base, ratio: r }, DATA);
+        const tops = rulerTops(list);
+        check(`ratio=${r}：上下标尺线右端 = 设计宽 - 内缩`, [W - 14, W - 14], [tops[0][2], tops[1][2]]);
+        const line = list.find(c => c.tag === 'Line' && Array.isArray(c.points) && c.points.length === pts.length);
+        check(`ratio=${r}：曲线首点在左边距`, 14, line.points[0]);
+        check(`ratio=${r}：曲线末点铺满到右边距`, W - 14, line.points[line.points.length - 2]);
+        check(`ratio=${r}：角标贴在 90% 宽处`, W * 9 / 10, byName(list, 'now_icon').x);
+        check(`ratio=${r}：角标 y 不随比例变（高固定）`, 160, byName(list, 'now_icon').y);
+        check(`ratio=${r}：中线仍在设计高的一半`, 100, tops[0].length === 4 ? tops[0][1] : null);
+        check(`ratio=${r}：进度线长度 = 绘图区高（与比例无关）`, 200 - 2 * 18, byName(list, 'metrics').width);
+    });
+    markGroup('D. 设计宽随比例', before);
+}
+
+/* ================= E. 垂直方向与标量尺寸完全不动 ================= */
+{
+    const before = results.length;
+    const base = cur.chartDefaultConfig(OPTS);
+    const ref = cur.chartChildren(OPTS, { ...base, ratio: 2 }, DATA);
+    const ys = list => list.map(c => c.y !== undefined ? c.y : (Array.isArray(c.points) ? c.points.filter((_, i) => i % 2 === 1) : null));
+    // 只比「与宽无关」的标量：字号、线宽、图标倍率、虚线间隔、圆点直径。
+    // 横线型 Line 的 width 是长度，本来就该随设计宽变（分组 D 单独断言）。
+    const scalars = list => list.map(c => [c.fontSize, c.strokeWidth, c.scale, c.dashPattern,
+        c.tag === 'Ellipse' ? [c.width, c.height] : null, c.tag === 'Text' ? c.text : null]);
+    [1, 3, 5, 8].forEach(r => {
+        const list = cur.chartChildren(OPTS, { ...base, ratio: r }, DATA);
+        check(`ratio=${r}：所有 y / 字号 / 线宽 / 圆点 / 图标 scale 与 ratio=2 完全相同`,
+            JSON.stringify(ys(ref)) + JSON.stringify(scalars(ref)),
+            JSON.stringify(ys(list)) + JSON.stringify(scalars(list)));
+    });
+    markGroup('E. 内部元素固定像素（不跟着缩）', before);
+}
+
+/* ================= F. 面积填充与折线都不越出绘图区（宽面板） ================= */
+{
+    const before = results.length;
+    const base = { ...cur.chartDefaultConfig(OPTS), showArea: true };
+    [1, 2, 8].forEach(r => {
+        const W = 200 * r;
+        const list = cur.chartChildren(OPTS, { ...base, ratio: r }, DATA);
+        const area = list.find(c => c.closed);
+        const flat = area.points;
+        let inside = true;
+        for (let i = 0; i < flat.length; i += 2) {
+            if (flat[i] < 14 - 1e-9 || flat[i] > W - 14 + 1e-9) inside = false;
+            if (flat[i + 1] < 18 - 1e-9 || flat[i + 1] > 200 - 18 + 1e-9) inside = false;
+        }
+        check(`ratio=${r}：面积多边形顶点全部夹在绘图区内`, true, inside);
+    });
+    markGroup('F. 面积不越界', before);
+}
+
+/* ================= G. update() 与曲线对齐 + 与线上逐字节 A/B ================= */
+function fakeBox(cfg, W, H) {
+    const list = cur.chartChildren(OPTS, cfg, DATA);
+    return { width: W, height: H, __leaferConfig: cfg, children: list.map(c => ({ ...c })) };
+}
+function fakeBoxPrev(cfg, W, H) {
+    const list = prev.chartChildren(OPTS, cfg, DATA);
+    return { width: W, height: H, __leaferConfig: cfg, children: list.map(c => ({ ...c })) };
+}
+{
+    const before = results.length;
+    const cfg = cur.chartDefaultConfig(OPTS);
+    // 与线上 update 逐字节 A/B：同一个盒子（400×200）跑到第 7 帧
+    if (prevMissing) {
+        skip('update：ratio 缺省时与线上逐字节相同：跳过', PREV_HOWTO);
+    } else {
+        const bp = fakeBoxPrev(cfg, 400, 200), bc = fakeBox(cfg, 400, 200);
+        prev.chartUpdate(OPTS, bp, FRAME, 0.3, { chartData: DATA._chartData, currentFrame: 7 });
+        cur.chartUpdate(OPTS, bc, FRAME, 0.3, { chartData: DATA._chartData, currentFrame: 7 });
+        check('update：ratio 缺省时与线上逐字节相同（含游标位置）',
+            JSON.stringify(bp.children), JSON.stringify(bc.children));
+    }
+
+    // 各比例下，update() 写的游标都落在曲线同一个点上（设计坐标 × 当前缩放比）
+    [1, 2, 5, 8].forEach(r => {
+        const W = 200 * r;
+        const box = fakeBox({ ...cfg, ratio: r }, W * 1.5, 200 * 1.5);   // 目标 = 设计 × 1.5
+        cur.chartUpdate(OPTS, box, FRAME, 0.5, { chartData: DATA._chartData, currentFrame: 7 });
+        const dot = byName(box.children, 'now_dot');
+        const line = box.children.find(c => c.tag === 'Line' && Array.isArray(c.points) && c.points.length === pts.length);
+        const sx = 1.5, sy = 1.5;
+        const expectX = (14 + pts[14] * (W - 28) / 400) * sx;
+        const expectY = (18 + pts[15] * (200 - 36) / 200) * sy;
+        check(`ratio=${r}：圆点 x 对齐曲线第 7 帧`, +expectX.toFixed(6), +dot.x.toFixed(6));
+        check(`ratio=${r}：圆点 y 对齐曲线第 7 帧`, +expectY.toFixed(6), +dot.y.toFixed(6));
+        // 子元素顶点是设计坐标，游标是渲染坐标，两者相差一个缩放比
+        check(`ratio=${r}：进度线 x 也等于曲线顶点 × 缩放`, +expectX.toFixed(6), +byName(box.children, 'metrics').x.toFixed(6));
+        check(`ratio=${r}：当前值文本跟在进度线右侧`, +(expectX + 5 * sx).toFixed(6), +byName(box.children, 'now_text').x.toFixed(6));
+        check(`ratio=${r}：角标钉在 90% 设计宽 × 缩放`, +(W * 9 / 10 * sx).toFixed(6), +byName(box.children, 'now_icon').x.toFixed(6));
+    });
+    markGroup('G. update 游标对齐', before);
+}
+
+/* ================= H. 改比例时面板外框：高不变、宽 = 高 × 比例 ================= */
+{
+    const before = results.length;
+    const mkBox = (w, h) => {
+        const box = { width: w, height: h, resized: null, resizeWidth(v) { this.resized = v; this.width = v; } };
+        return box;
+    };
+    const cfg = { width: 400, height: 200 };
+    const box = mkBox(400, 200);
+    check('ratio 8：宽度拉到 高×8', true, cur.chartApplyRatioChange(box, 'ratio', 8, cfg));
+    check('ratio 8：box.width = 1600', 1600, box.width);
+    check('ratio 8：box.height 不动', 200, box.height);
+    check('ratio 8：config.width 同步（别让 __leaferConfig 说谎）', 1600, cfg.width);
+    const box2 = mkBox(1600, 300);
+    cur.chartApplyRatioChange(box2, 'ratio', 3, {});
+    check('任意高度也按 高×比例（300×3）', 900, box2.width);
+    const box3 = mkBox(800, 200);
+    const cfg3 = { width: 800, height: 200 };
+    cur.chartApplyRatioChange(box3, 'ratio', 0, cfg3);
+    check('面板清空输入（ratio=0）夹到 1:1，不会除零', 200, box3.width);
+    check('其它键不碰外框', false, cur.chartApplyRatioChange(box3, 'dotSize', 9, cfg3));
+    check('其它键改后宽度仍未变', 200, box3.width);
+    markGroup('H. 外框跟随比例', before);
+}
+
+/* ================= I. 组件定义接线 ================= */
+{
+    const before = results.length;
+    [heartDef, paceDef, eleDef].forEach(def => {
+        const item = def.settings.find(s => s.key === 'ratio');
+        check(`${def.id}：settings 有 ratio 项且 min/max/step = 1/8/1`,
+            { type: 'number', min: 1, max: 8, step: 1 }, item && { type: item.type, min: item.min, max: item.max, step: item.step });
+        check(`${def.id}：声明了 designSize`, true, typeof def.designSize === 'function');
+        check(`${def.id}：designSize(默认) = 400×200`, { width: 400, height: 200 }, def.designSize(def.defaultConfig));
+        check(`${def.id}：designSize(ratio=8) = 1600×200`, { width: 1600, height: 200 }, def.designSize({ ratio: 8 }));
+        check(`${def.id}：声明了 onSettingChange`, true, typeof def.onSettingChange === 'function');
+    });
+    markGroup('I. 三个图表接线', before);
+}
+
+/* ---------- 渲染 ---------- */
+const failed = results.filter(r => r.ok === false);
+const skipped = results.filter(r => r.ok === null);
+const ran = results.length - skipped.length;
+const sum = document.getElementById('summary');
+sum.textContent = failed.length
+    ? `${ran - failed.length} / ${ran} 通过，${failed.length} 个失败`
+    : `${ran} / ${ran} 全部通过` + (skipped.length ? `（另有 ${skipped.length} 项因缺线上副本跳过）` : '');
+sum.className = failed.length ? 'fail' : 'pass';
+document.title = (failed.length ? '✗ ' : '✓ ') + 'chart 宽高比校验';
+
+const wrap = document.getElementById('cases');
+groups.forEach(g => {
+    const sec = document.createElement('div');
+    sec.className = 'case';
+    const h = document.createElement('h2');
+    const bad = g.rows.filter(r => r.ok === false).length;
+    const skipN = g.rows.filter(r => r.ok === null).length;
+    h.textContent = `${bad ? '✗' : '✓'} ${g.title}（${g.rows.length - bad - skipN}/${g.rows.length - skipN}）` + (skipN ? ` + ${skipN} 跳过` : '');
+    sec.appendChild(h);
+    g.rows.forEach(r => {
+        const row = document.createElement('div');
+        const state = r.ok === null ? 'skip' : (r.ok ? 'ok' : 'bad');
+        row.className = 'row ' + state;
+        const cut = v => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s && s.length > 120 ? s.slice(0, 120) + '…' : s; };
+        row.innerHTML = `<span class="mark">${state === 'skip' ? '−' : (state === 'ok' ? '✓' : '✗')}</span><span>${r.name}</span>` +
+            (state === 'skip' ? `<span class="exp">${cut(r.skipped)}</span>`
+                : (state === 'ok' ? '' : `<span class="exp">期望 ${cut(r.expected)} ／ 实得 ${cut(r.actual)}</span>`));
+        sec.appendChild(row);
+    });
+    wrap.appendChild(sec);
+});
+</script>
+</body>
+</html>

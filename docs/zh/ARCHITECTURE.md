@@ -124,6 +124,11 @@ data/fieldComputer.js → computeAllFields()
   │
   ▼
 components/factory.js → 根据模板 JSON 创建 Leafer 组件
+  │     · 设计幅面：组件声明 designSize(config) 时按配置算（折线图表的 1:1~1:8 宽高比就这么生效），
+  │       否则取 defaultConfig.width/height；再按 目标÷设计 缩放子元素
+  │     · 面板改设置项：先 definition.onSettingChange()（图表在这里把 box.width 改成 高×比例，
+  │       直接赋值——Box 带 lockRatio，resizeWidth() 会连高度一起等比放大），
+  │       再 applyPropertyChange()，非布局键最后走 rebuildBoxChildren() 按新设计宽重建
   │
   ▼
 前端预览 / 视频渲染

@@ -70,7 +70,7 @@
 | `name` | string | ✅ | 组件显示名称（冗余，便于阅读） |
 | `x` | number | ✅ | 左上角 X 坐标（像素） |
 | `y` | number | ✅ | 左上角 Y 坐标（像素） |
-| `width` | number | ✅ | 组件宽度（像素） |
+| `width` | number | ✅ | 组件宽度（像素）。工厂先按「设计尺寸」建子元素——默认取 `defaultConfig.width`，声明了 `designSize(config)` 的组件按配置算（三个图表的设计宽 = 200 × `ratio`）——再缩放到这里的值 |
 | `height` | number | ✅ | 组件高度（像素） |
 | `rotation` | number | - | 旋转角度（度），默认 0 |
 | `scale` | number | - | 缩放比例，默认 1 |
@@ -88,6 +88,9 @@
 
 - `x`/`y`/`width`/`height`/`rotation`/`scale` 不重复写入，几何信息以顶层字段为准。
 - 与默认值相同的键一律省略，所以新增设置项不会撑大既有模板。
+- 会改外框大小的设置项是「两处都存、且两处一致」：图表的 `ratio`（1~8，默认 2）进
+  `config`，它算出来的宽（默认高度下 = 200 × 比例）进顶层 `width`。老模板没有
+  `ratio` 键 → 回落 2 → 恢复出来的外框仍是升级前的 400×200。
 - 无法 `JSON.stringify` 的值（Leafer 实例、循环引用）跳过而不抛错。
 - 旧模板没有 `config` 字段，载入行为与以前完全一致。
 - 上传的头像/图标以 `data:image/png;base64,…` 存在 `config` 里，一张 256×256 PNG
