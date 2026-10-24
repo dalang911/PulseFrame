@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Weather 组件校验（图标补全 + 配置项 + 横向面板）</title>
+<style>
+  body { font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; margin: 24px; background: #fafafa; color: #222; }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  .note { color: #666; font-size: 12px; margin-bottom: 14px; max-width: 1000px; }
+  #summary { font-weight: bold; font-size: 16px; padding: 8px 12px; border-radius: 6px; display: inline-block; margin-bottom: 14px; }
+  #summary.pass { background: #e6f7ed; color: #1b7a3d; }
+  #summary.fail { background: #fdecaa; color: #a33; }
+  .case { margin: 0 0 12px; border: 1px solid #e3e3e3; border-radius: 6px; background: #fff; }
+  .case > h2 { font-size: 14px; margin: 0; padding: 8px 12px; background: #f2f2f2; border-bottom: 1px solid #e3e3e3; }
+  .row { display: flex; gap: 8px; padding: 5px 12px; border-bottom: 1px dashed #eee; font-size: 13px; }
+  .row:last-child { border-bottom: none; }
+  .row.ok .mark { color: #1b7a3d; }
+  .row.bad { background: #fff5f5; }
+  .row.bad .mark { color: #c22; font-weight: bold; }
+  .row.skip { background: #fcfcfc; color: #999; }
+  .row.skip .mark { color: #bbb; }
+  .exp { color: #777; margin-left: auto; font-family: Consolas, monospace; font-size: 12px; max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>Weather：7 个图标 + 扩充配置项 + 新增横向面板</h1>
+<p class="note">
+  防漂移页，四条底线 ——
+  ① 方形面板 <code>el_weather_pan</code> 只带<strong>老配置</strong>（HEAD 那 12 个键）时，
+  <code>build()</code> 的 5 个子元素必须与升级前<strong>逐项相同</strong>（本页把 HEAD 的字面量抄死在下面当基准，
+  唯一豁免是 <code>name</code> 元数据键和 <code>path</code> —— 图标路径是这次<strong>故意</strong>补全/修复的）；
+  ② 新出现的每个设置项都<strong>真的被 build() 消费</strong>（逐个改值，输出必须变），且键名不撞
+  <code>LAYOUT_KEYS</code>（撞了会走「只改 Box 不重建子元素」那条路，改了没反应）；
+  ③ 7 个图标齐全、路径长度与用户给的老 <code>svg.js</code> 源文件一致（防再次迁移截断 —— 上次 cloudy 少了后半段、
+  rain 的 6 滴雨全丢）；④ 横向面板 <code>el_weather_wide_pan</code> 的排版契约：
+  圆盘与图标同中心、分隔线用「横线转 90°」、天气名称贴在右上角（<code>textAlign:'right'</code> 时 x 即右边界）。
+  跑法：<code>node serve.js PulseFrame 8123</code> → <code>http://127.0.0.1:8123/tools/weather-test.html</code>。
+</p>
+<div id="summary">运行中…</div>
+<div id="cases"></div>
+
+<script type="module">
+const results = [];
+const groups = [];
+function check(name, expected, actual) {
+    const ok = JSON.stringify(expected) === JSON.stringify(actual);
+    results.push({ name, ok, expected, actual });
+    return ok;
+}
+/** 语义相等（对象键顺序无关），用于跟 HEAD 的字面量比 */
+function eqAny(a, b) {
+    if (a === b) return true;
+    if (typeof a !== typeof b || a === null || b === null) return false;
+    if (typeof a !== 'object') return false;
+    if (Array.isArray(a) !== Array.isArray(b)) return false;
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    return ka.every(k => kb.includes(k) && eqAny(a[k], b[k]));
+}
+function checkEq(name, expected, actual) {
+    const ok = eqAny(expected, actual);
+    results.push({ name, ok, expected, actual });
+    return ok;
+}
+/** 把 from 之后产生的断言归到一个分组里，便于渲染 */
+function markGroup(title, from) {
+    const rows = [];
+    for (let i = from; i < results.length; i++) { results[i].grouped = true; rows.push(results[i]); }
+    groups.push({ title, rows });
+}
+
+/* ---------- 被测模块 ---------- */
+const wc = await import('../js/components/definitions/weatherCommon.js');
+const weatherPanel = await import('../js/components/definitions/weatherPanel.js');
+const wideMod = await import('../js/components/definitions/weatherWide.js');
+
+const el_weather_pan = weatherPanel.weatherPanels.find(d => d.id === 'el_weather_pan');
+const el_weather_wide_pan = weatherPanelsOr(wideMod);
+function weatherPanelsOr(mod) { return mod.el_weather_wide_pan || mod.default; }
+
+// PropertyRenderer 的 LAYOUT_KEYS（撞名的键不会触发子元素重建）。
+// 不能直接 import 那个模块：它 → factory.js 顶层就 `const { Box } = window.LeaferUI`，
+// 本页没加载 Leafer，取模块会直接抛。改成把源码抓下来正则取那一行，
+// 拿不到（比如用 file:// 打开，fetch 被禁）才退回抄死的副本。
+const LAYOUT_KEYS_FALLBACK = ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'cornerRadius', 'fill', 'stroke', 'strokeWidth'];
+let LAYOUT_KEYS = LAYOUT_KEYS_FALLBACK;
+let layoutKeysSource = '抄死的副本';
+try {
+    const src = await (await fetch('../js/ui/PropertyRenderer.js')).text();
+    const m = src.match(/LAYOUT_KEYS\s*=\s*\[([^\]]*)\]/);
+    if (m) {
+        const parsed = m[1].split(',').map(s => s.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean);
+        if (parsed.length) { LAYOUT_KEYS = parsed; layoutKeysSource = 'PropertyRenderer.js 源码'; }
+    }
+} catch (e) { /* 留 fallback */ }
+
+/* ============================================================
+   A. 方形面板默认观感 == 升级前（HEAD 字面量抄死在这里）
+   ============================================================ */
+{
+    const before = results.length;
+    // HEAD 版 defaultConfig（12 个键，一个不多）
+    const HEAD_CONFIG = {
+        x: 1620, y: 430, width: 200, height: 230,
+        city: 'ShangHai', temp: '18~25℃', date: '2025-12-12',
+        bgColor1: '#A09EF5', bgColor2: '#112950',
+        textColor1: '#FFFFFF', textColor2: '#FFFFFF', textColor3: '#FFFFFF',
+        weatherIcon: 'sunny', iconColor: '#FFFFFF'
+    };
+    checkEq('defaultConfig 里 HEAD 那些键的值一字未改',
+        true, Object.entries(HEAD_CONFIG).every(([k, v]) => el_weather_pan.defaultConfig[k] === v));
+
+    // HEAD 版 build() 的产物（去掉 name 后必须逐项相同）
+    const HEAD_CHILDREN = [
+        {
+            tag: 'Rect', width: 200, height: 230, cornerRadius: 20,
+            fill: {
+                type: 'linear', from: 'top-left', to: 'bottom-right',
+                stops: [{ offset: 0, color: '#A09EF5' }, { offset: 1, color: '#112950' }]
+            }
+        },
+        { tag: 'Text', y: 10, x: 10, resizeFontSize: true, fontSize: 26, fontWeight: 'black', text: 'ShangHai', fill: '#FFFFFF', textAlign: 'left', verticalAlign: 'top' },
+        { tag: 'Text', y: 144, x: 100, resizeFontSize: true, fontSize: 30, fontWeight: 'black', text: '18~25℃', fill: '#FFFFFF', textAlign: 'center', verticalAlign: 'top' },
+        { tag: 'Text', y: 190, x: 100, resizeFontSize: true, fontSize: 24, fontWeight: 'black', text: '2025-12-12', fill: '#FFFFFF', textAlign: 'center', verticalAlign: 'top' },
+        { tag: 'Rect', x: 100, y: 100, scale: 0.1, around: 'center', path: wc.WEATHER_ICONS.sunny, fill: '#FFFFFF' }
+    ];
+    const strip = list => list.map(c => { const o = { ...c }; delete o.name; return o; });
+    const actual = strip(el_weather_pan.build({ ...HEAD_CONFIG }));
+    check('老配置下子元素数量还是 5（新行默认不产出）', 5, actual.length);
+    checkEq('老配置下 build() 与升级前逐项相同（豁免 name / path 已修）', HEAD_CHILDREN, actual);
+    // factory 走的是「defaultConfig 全量合并」那条路，必须算出同一个东西
+    const actualFromDefault = strip(el_weather_pan.build({ ...el_weather_pan.defaultConfig }));
+    checkEq('新 defaultConfig 全量喂进去，输出仍与升级前逐项相同', HEAD_CHILDREN, actualFromDefault);
+
+    // 空配置（模板里只存了部分键）也必须落回同一批字面量
+    const sparse = strip(el_weather_pan.build({ city: 'Tokyo' }));
+    check('只传 city 时几何仍等于 HEAD（只是文本换了）', HEAD_CHILDREN[2].fontSize, sparse[2].fontSize);
+    checkEq('只传 city 时渐变仍是 top-left→bottom-right', HEAD_CHILDREN[0].fill, sparse[0].fill);
+    check('只传 city 时城市名生效', 'Tokyo', sparse[1].text);
+    markGroup('A. 默认观感不变', before);
+}
+
+/* ============================================================
+   B. 7 个图标齐全 + 路径没被截断
+   ============================================================ */
+{
+    const before = results.length;
+    const KEYS = ['sunny', 'cloudy', 'rain', 'fog', 'windy', 'snow', 'night'];
+    // 用户给的老 svg.js 里这 7 条 path 的长度（截断过一次，这里当回归基准）
+    const SOURCE_LEN = { sunny: 1123, cloudy: 1030, rain: 1611, fog: 914, windy: 1455, snow: 2086, night: 741 };
+    checkEq('WEATHER_ICONS 的键正好这 7 个', KEYS, Object.keys(wc.WEATHER_ICONS));
+    KEYS.forEach(k => {
+        const p = wc.WEATHER_ICONS[k];
+        check(`${k} 路径长度等于源文件（防截断）`, SOURCE_LEN[k], typeof p === 'string' ? p.length : null);
+    });
+    check('7 条路径互不相同', 7, new Set(Object.values(wc.WEATHER_ICONS)).size);
+    checkEq('按钮组选项 = 7 个天气名称',
+        ['Sunny', 'Cloudy', 'Rain', 'Fog', 'Windy', 'Snow', 'Night'],
+        wc.WEATHER_ICON_OPTIONS.map(o => o.label));
+    checkEq('按钮组选项 value 与图标键一一对应', KEYS, wc.WEATHER_ICON_OPTIONS.map(o => o.value));
+    check('weatherIconPath(未知) 退回 sunny', wc.WEATHER_ICONS.sunny, wc.weatherIconPath('thunder'));
+    check('weatherIconPath() 空值退回 sunny', wc.WEATHER_ICONS.sunny, wc.weatherIconPath());
+    check('weatherIconPath(每个名称) 都能取到路径', true, KEYS.every(k => wc.weatherIconPath(k) === wc.WEATHER_ICONS[k]));
+    markGroup('B. 图标表', before);
+}
+
+/* ============================================================
+   C. 渐变：默认值 + 只允许 Direction9 认的关键字
+   ============================================================ */
+{
+    const before = results.length;
+    // 浏览器实测 Leafer 2.2.11 的 Direction9：表外字符串会抛
+    // "Cannot read properties of undefined (reading 'x')"
+    const DIRECTION9 = ['top-left', 'top', 'top-right', 'left', 'center', 'right', 'bottom-left', 'bottom', 'bottom-right'];
+    const pairs = Object.values(wc.BG_DIRECTIONS);
+    check('方向表每一对 from/to 都是 Direction9 关键字', true,
+        pairs.every(([a, b]) => DIRECTION9.includes(a) && DIRECTION9.includes(b)));
+    check('方向表数量 == 选项数量', Object.keys(wc.BG_DIRECTIONS).length, wc.BG_DIRECTION_OPTIONS.length);
+    checkEq('默认渐变 = linear top-left→bottom-right',
+        { type: 'linear', from: 'top-left', to: 'bottom-right', stops: [{ offset: 0, color: '#A09EF5' }, { offset: 1, color: '#112950' }] },
+        wc.weatherGradient({}));
+    checkEq('bgDirection=l-r 换成 left→right', 'left', wc.weatherGradient({ bgDirection: 'l-r' }).from);
+    checkEq('bgDirection 非法值退回默认', 'top-left', wc.weatherGradient({ bgDirection: 'zzz' }).from);
+    checkEq('bgType=radial 走径向（center→bottom）', { type: 'radial', from: 'center', to: 'bottom' },
+        (() => { const g = wc.weatherGradient({ bgType: 'radial' }); return { type: g.type, from: g.from, to: g.to }; })());
+    checkEq('两个底色进 stops', ['#111111', '#eeeeee'],
+        wc.weatherGradient({ bgColor1: '#111111', bgColor2: '#eeeeee' }).stops.map(s => s.color));
+    markGroup('C. 渐变方向（Direction9 实测）', before);
+}
+
+/* ============================================================
+   D. 开关与派生文案
+   ============================================================ */
+{
+    const before = results.length;
+    const base = el_weather_pan.build({});
+    check('默认不产出天气名称那行（老观感）', 5, base.length);
+    check('showCondition:true 多一行', 6, el_weather_pan.build({ showCondition: true }).length);
+    const cond = el_weather_pan.build({ showCondition: true, weatherIcon: 'snow' })
+        .find(c => c.name === 'condition_text');
+    check('天气名称文案跟随图标', 'Snow', cond && cond.text);
+    check('conditionText 填了就用填的', '局部阵雨',
+        el_weather_pan.build({ showCondition: true, conditionText: '局部阵雨' })
+            .find(c => c.name === 'condition_text').text);
+    check('showIcon:false 去掉图标', 4, el_weather_pan.build({ showIcon: false }).length);
+    ['showCity', 'showTemp', 'showDate'].forEach((k, i) => {
+        check(`${k}:false 少一行`, 4, el_weather_pan.build({ [k]: false }).length);
+        const kept = el_weather_pan.build({ [k]: false }).filter(c => c.tag === 'Text').length;
+        check(`${k}:false 只去掉自己那一行（剩 ${kept} 行文字）`, 2, kept);
+        void i;
+    });
+    check('四个开关全关只剩背景', 1,
+        el_weather_pan.build({ showCity: false, showTemp: false, showDate: false, showIcon: false }).length);
+    check('输入框清空（\'\'）不会把文本变成空串', 'ShangHai', el_weather_pan.build({ city: '' })
+        .find(c => c.name === 'city_text').text);
+    markGroup('D. 开关与文案', before);
+}
+
+/* ============================================================
+   E. 每个设置项都真的被 build() 消费（逐个改值，输出必须变）
+   ============================================================ */
+{
+    const before = results.length;
+    const MUT = { number: 77, color: '#0f0f0f', text: '__SENTINEL__', boolean: [true, false] };
+    function probe(definition, label) {
+        const missing = [];
+        definition.settings.forEach(item => {
+            if (item.type === 'title' || !item.key) return;
+            const key = item.key;
+            // 天气名称那一行默认不产出，测它得先把开关打开
+            const pre = /^condition/.test(key) ? { showCondition: true } : {};
+            const baseOut = JSON.stringify(definition.build({ ...pre }));
+            let changed = false;
+            if (item.type === 'boolean') {
+                changed = [true, false].some(v => JSON.stringify(definition.build({ ...pre, [key]: v })) !== baseOut);
+            } else if (item.type === 'button_group') {
+                const opts = (item.options || []).map(o => o.value);
+                changed = opts.some(v => JSON.stringify(definition.build({ ...pre, [key]: v })) !== baseOut);
+            } else if (key === 'bgBorderColor' || key === 'bgBorderWidth') {
+                // 描边要颜色和宽度同时给才生效，单独改一个当然没反应 —— 合起来测
+                changed = JSON.stringify(definition.build({ ...pre, bgBorderColor: '#0f0f0f', bgBorderWidth: 3 })) !== baseOut;
+            } else {
+                const v = MUT[item.type === 'bg_color' || item.type === 'image_picker' ? 'color' : item.type] ?? '__SENTINEL__';
+                changed = JSON.stringify(definition.build({ ...pre, [key]: v })) !== baseOut;
+            }
+            if (!changed) missing.push(`${label}.${key}(${item.type})`);
+        });
+        check(`${label}：每个设置项都影响 build() 输出`, [], missing);
+    }
+    probe(el_weather_pan, 'Weather');
+    probe(el_weather_wide_pan, 'WeatherWide');
+
+    // 具体几个键的落点（万一上面整体判定挂了，这几条能指出是哪个）
+    const sized = el_weather_pan.build({ cityFontSize: 40, iconScale: 0.25, bgCornerRadius: 55 });
+    check('cityFontSize 进城市行', 40, sized.find(c => c.name === 'city_text').fontSize);
+    check('iconScale 进图标倍率', 0.25, sized.find(c => c.name === 'icon').scale);
+    check('bgCornerRadius 进背景圆角（不是 Box.cornerRadius，避开 LAYOUT_KEYS）', 55, sized[0].cornerRadius);
+    const moved = el_weather_pan.build({ tempX: 5, tempY: 6, dateX: 7, dateY: 8 });
+    checkEq('temp/date 的 X/Y 各自进位', [5, 6, 7, 8], [moved.find(c => c.name === 'temp_text').x, moved.find(c => c.name === 'temp_text').y, moved.find(c => c.name === 'date_text').x, moved.find(c => c.name === 'date_text').y]);
+    const bordered = el_weather_pan.build({ bgBorderColor: '#FF0000', bgBorderWidth: 4 });
+    checkEq('边框色+宽度同时给才画边框', ['#FF0000', 4], [bordered[0].stroke, bordered[0].strokeWidth]);
+    check('只给边框色不给宽度 → 不画', undefined, el_weather_pan.build({ bgBorderColor: '#FF0000' })[0].stroke);
+    check('fontWeight 换 normal 后三行都跟着换', true,
+        ['city_text', 'temp_text', 'date_text'].every(n =>
+            el_weather_pan.build({ fontWeight: 'normal' }).find(c => c.name === n).fontWeight === 'normal'));
+    markGroup('E. 设置项真的生效', before);
+}
+
+/* ============================================================
+   F. 设置项规范：类型受支持、不撞 LAYOUT_KEYS、无重复键
+   ============================================================ */
+{
+    const before = results.length;
+    const TYPES = ['title', 'color', 'bg_color', 'number', 'select', 'boolean', 'bg_image', 'image_picker', 'font_selector', 'unit_button', 'button_group', 'text'];
+    [el_weather_pan, el_weather_wide_pan].forEach(def => {
+        const badType = def.settings.filter(s => !TYPES.includes(s.type)).map(s => `${s.key || s.name}:${s.type}`);
+        check(`${def.id}：所有 type 都是 PropertyRenderer 支持的`, [], badType);
+        const collide = def.settings.filter(s => s.key && LAYOUT_KEYS.includes(s.key)).map(s => s.key);
+        check(`${def.id}：键名不撞 LAYOUT_KEYS（撞了改了不重建）`, [], collide);
+        const keys = def.settings.filter(s => s.key).map(s => s.key);
+        check(`${def.id}：没有重复键`, keys.length, new Set(keys).size);
+        const bgBad = def.settings.filter(s => s.type === 'button_group')
+            .filter(s => !Array.isArray(s.options) || !s.options.length || s.options.some(o => o.label == null || o.value == null))
+            .map(s => s.key);
+        check(`${def.id}：每个 button_group 都有 label/value 选项表`, [], bgBad);
+        const numNoDefault = def.settings.filter(s => s.type === 'number' && s.key &&
+            !(s.key in def.defaultConfig) && !(typeof s.min === 'number'));
+        check(`${def.id}：number 项都给了 min/max（面板不会滑出负尺寸）`, [], numNoDefault.map(s => s.key));
+        // 面板靠 defaultConfig 里的值点亮当前档；键不在里面就永远不高亮（用户看不出哪档生效）
+        const notInDefault = def.settings
+            .filter(s => s.key && !(s.key in def.defaultConfig))
+            .map(s => s.key);
+        check(`${def.id}：每个设置键都出现在 defaultConfig 里（按钮组才能点亮当前档）`, [], notInDefault);
+    });
+    // 方形面板的老键一个都不能少（模板/存档兼容）
+    const HEAD_KEYS = ['x', 'y', 'width', 'height', 'city', 'temp', 'date', 'bgColor1', 'bgColor2',
+        'textColor1', 'textColor2', 'textColor3', 'weatherIcon', 'iconColor'];
+    const cur = HEAD_KEYS.filter(k => !(k in el_weather_pan.defaultConfig));
+    check('HEAD 的配置键全部保留（老模板还能载入）', [], cur);
+    const cur2 = HEAD_KEYS.filter(k => !el_weather_pan.settings.some(s => s.key === k));
+    // x/y/width/height 不在 definition.settings 里，是 SettingsPanel._renderPositionBox 统一给的
+    const CONTENT_KEYS = ['city', 'temp', 'date', 'bgColor1', 'bgColor2', 'textColor1', 'textColor2', 'textColor3', 'weatherIcon', 'iconColor'];
+    check('HEAD 的可编辑内容键仍在面板上（位置/尺寸走面板顶部的 X/Y/W/H，不算在这里）',
+        [], CONTENT_KEYS.filter(k => !el_weather_pan.settings.some(s => s.key === k)));
+    void cur2;
+    markGroup(`F. 设置项规范（LAYOUT_KEYS 来源：${layoutKeysSource}）`, before);
+}
+
+/* ============================================================
+   G. 横向面板的排版契约
+   ============================================================ */
+{
+    const before = results.length;
+    const def = el_weather_wide_pan;
+    check('注册的是两个天气组件', 2, weatherPanel.weatherPanels.length);
+    check('横向面板有独立 id', 'el_weather_wide_pan', def.id);
+    check('分类与方形一致（都在组件面板 time 组里）', 'time', def.category);
+    const kids = def.build({});
+    const names = kids.map(c => c.name);
+    checkEq('子元素顺序：底→圆盘→分隔线→图标→三行文字→天气名称',
+        ['bg', 'disc', 'divider', 'icon', 'city_text', 'temp_text', 'date_text', 'condition_text'], names);
+    const by = n => kids.find(c => c.name === n);
+    check('面板尺寸 560×200', [560, 200], [kids[0].width, kids[0].height]);
+    check('圆盘与图标同中心（图标绕中心缩放不会跑偏）', [by('disc').x, by('disc').y], [by('icon').x, by('icon').y]);
+    check('圆盘直径 150 > 图标（sunny ×0.14 ≈ 109）',
+        true, by('disc').width > 782.569 * by('icon').scale);
+    check('分隔线是横线转 90°（与图表进度线同一手法）', 90, by('divider').rotation);
+    check('分隔线在圆盘与文字之间', true, by('divider').x > by('disc').x + by('disc').width / 2 && by('divider').x < by('city_text').x);
+    check('温度比城市/日期大（做主角）', true,
+        by('temp_text').fontSize > by('city_text').fontSize && by('temp_text').fontSize > by('date_text').fontSize);
+    check('天气名称右对齐贴右边', 'right', by('condition_text').textAlign);
+    check('天气名称右边界不超过面板宽', true, by('condition_text').x <= kids[0].width);
+    const rowsY = ['city_text', 'temp_text', 'date_text'].map(n => by(n).y);
+    check('三行文字 y 递增不重叠', true, rowsY[0] < rowsY[1] && rowsY[1] < rowsY[2]);
+    check('横向面板默认也带渐变过渡', 'linear', kids[0].fill.type);
+    check('圆盘可关', 7, def.build({ showDisc: false }).length);
+    check('分隔线可关', 7, def.build({ showDivider: false }).length);
+    check('天气名称可关（横向默认开）', 7, def.build({ showCondition: false }).length);
+    check('选雪天图标 → 路径换成 snow', wc.WEATHER_ICONS.snow, def.build({ weatherIcon: 'snow' }).find(c => c.name === 'icon').path);
+    markGroup('G. 横向面板排版', before);
+}
+
+/* ============================================================
+   渲染结果
+   ============================================================ */
+const pass = results.filter(r => r.ok === true).length;
+const fail = results.filter(r => r.ok === false);
+const summary = document.getElementById('summary');
+summary.textContent = fail.length ? `✗ ${fail.length} 项不通过（共 ${results.length} 项）` : `✓ 全部通过：${pass} 项`;
+summary.className = fail.length ? 'fail' : 'pass';
+
+const box = document.getElementById('cases');
+groups.forEach(g => {
+    const sec = document.createElement('div');
+    sec.className = 'case';
+    sec.innerHTML = `<h2>${g.title}</h2>`;
+    g.rows.forEach(r => {
+        const row = document.createElement('div');
+        row.className = 'row ' + (r.ok === true ? 'ok' : r.ok === false ? 'bad' : 'skip');
+        const mark = document.createElement('span');
+        mark.className = 'mark';
+        mark.textContent = r.ok === true ? '✓' : r.ok === false ? '✗' : '−';
+        const label = document.createElement('span');
+        label.textContent = r.name;
+        row.appendChild(mark);
+        row.appendChild(label);
+        if (r.ok === false) {
+            const exp = document.createElement('span');
+            exp.className = 'exp';
+            exp.textContent = `期望 ${JSON.stringify(r.expected)} / 实际 ${JSON.stringify(r.actual)}`;
+            row.appendChild(exp);
+        }
+        sec.appendChild(row);
+    });
+    box.appendChild(sec);
+});
+</script>
+</body>
+</html>

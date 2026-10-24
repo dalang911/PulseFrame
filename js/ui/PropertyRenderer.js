@@ -169,6 +169,40 @@ function createRow(item, config, onChange, useNativeColor, cssPrefix) {
             sel.addEventListener('change', () => onChange(item.key, sel.value));
             break;
 
+        case 'button_group': {
+            // 按钮组：每个选项一个按钮，按钮上直接写名称（如 Sunny / Cloudy / Rain…）。
+            // 相比 select 少一次展开、全部候选一眼可见，适合 3~8 个短名称的枚举设置。
+            // options 结构与 select 完全一致，把某项从 select 换成 button_group 不用改配置值。
+            // 不套 layui-btn：那套类名依赖 .layui-form 上下文，本容器没有，反而会被 layui 的
+            // 通用 button 规则改掉内边距；这里用原生 button + 自带描边，选中态只换边框/底色。
+            row.style.alignItems = 'flex-start';
+            inputDiv.style.cssText = 'flex:1 1 auto; min-width:0; margin:0; display:flex; flex-wrap:wrap; gap:3px;';
+            const groupOptions = item.options || [];
+            const buttons = [];
+            const paintGroup = (picked) => {
+                buttons.forEach(btn => {
+                    const active = String(btn.__value) === String(picked);
+                    btn.style.borderColor = active ? '#1890ff' : '#d9d9d9';
+                    btn.style.color = active ? '#1890ff' : '#666';
+                    btn.style.background = active ? '#e6f4ff' : '#fafafa';
+                });
+            };
+            groupOptions.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.__value = opt.value;
+                btn.textContent = opt.label == null ? String(opt.value) : String(opt.label);
+                btn.title = btn.textContent;
+                btn.style.cssText = 'flex:0 0 auto; height:22px; line-height:20px; padding:0 7px; margin:0; font-size:11px; border:1px solid #d9d9d9; border-radius:3px; cursor:pointer; background:#fafafa; color:#666;';
+                btn.onclick = () => { onChange(item.key, opt.value); paintGroup(opt.value); };
+                buttons.push(btn);
+                inputDiv.appendChild(btn);
+            });
+            // 初始高亮当前值；值不在选项里（老模板存了个已废弃的枚举）时全不亮，不误导
+            paintGroup(displayValue);
+            break;
+        }
+
         case 'boolean':
             // 原生复选框（#settable 无 layui-form 包裹，不会被 layui 改写），accent-color 让勾选色跟上手柄主题
             inputDiv.innerHTML = `<input type="checkbox" ${displayValue ? 'checked' : ''} data-key="${item.key}" style="width:14px; height:14px; margin:0; cursor:pointer; accent-color:#16b777;">`;

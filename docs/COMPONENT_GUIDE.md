@@ -88,6 +88,19 @@ those 21 show up as "skipped" when the copies are absent, never as false passes 
 the copies present the page reports 180/180). Run it on a static server whenever you
 touch `chartCommon.js`, `js/utils/math.js` or `factory.js`.
 
+The weather pair has its own page, [`tools/weather-test.html`](../tools/weather-test.html)
+— 82 assertions. It re-declares the square panel's *pre-upgrade* `build()` output as
+literal constants and compares, so "old template still looks identical" is measured
+rather than assumed (the only exemptions are the `name` metadata key and the icon
+`path`, which this upgrade deliberately completed), plus: every one of the 7 icon paths
+is checked against the character length of the source SVG so a future migration cannot
+silently truncate it again, every `settings` key is probed to prove `build()` actually
+consumes it and does not collide with `LAYOUT_KEYS`, the gradient directions are all
+verified to be `Direction9` keywords (Leafer throws on anything else), and the wide
+panel's layout contract (disc and icon share a centre, divider is a rotated `Line`,
+condition label is right-pinned). Run it after touching `weatherCommon.js`,
+`weatherPanel.js`, `weatherWide.js` or `icons.js`.
+
 ### Settings control types
 
 `renderSettings()` (`js/ui/PropertyRenderer.js`) turns each `settings` entry into
@@ -99,6 +112,7 @@ one row. Supported `item.type`:
 | `number` | number input (`min`/`max`/`step`) | `parseFloat`, `0` when blank |
 | `color`, `bg_color` | colour picker (layui in the editor, native in Studio) | `#rrggbb` |
 | `select` | dropdown from `item.options` (`{value,label}`) | the string `value` |
+| `button_group` | one small button per option, labelled with the option name; the active one gets a blue border | the option's `value` |
 | `boolean` | checkbox | `true` / `false` |
 | `text` *(default)* | free text input | the string |
 | `bg_image` | preset thumbnail row + file input | preset url or dataURL |
@@ -109,6 +123,12 @@ one row. Supported `item.type`:
 `displayValue = config[key] ?? item.defaultValue ?? ''`, so a row can echo the value
 `build()` actually falls back to even for templates saved before the key existed —
 keep the two in sync.
+
+`button_group` highlights the row whose `value` equals `displayValue`, so a
+button-group knob only shows an active option when the key is reachable through that
+chain: either list it in `defaultConfig` (what the weather panels do — every knob is
+in `defaultConfig` with a value equal to the `build()` fallback) or set
+`item.defaultValue`. `select` does not care, since a `<select>` shows the value itself.
 
 **Key naming matters.** `applyPropertyChange()` treats `x`, `y`, `width`, `height`,
 `rotation`, `opacity`, `cornerRadius`, `fill`, `stroke`, `strokeWidth` as layout keys:
@@ -342,7 +362,7 @@ component is not orphaned in a new group:
 | Category | Contents | Examples |
 |---|---|---|
 | `background` | the base layer | `appv_bg_pan` |
-| `time` | clock and date blocks | `appv_date_pan`, `text_time_pan` |
+| `time` | clock, date and weather blocks | `appv_date_pan`, `text_time_pan`, `el_weather_pan` (square) + `el_weather_wide_pan` (560×200) — both are option objects over `definitions/weatherCommon.js` |
 | `distance` | distance bars, rulers, arcs, gauges | `lite_distance_pan`, `zs8_distance_pan`, `el_speed_pan` |
 | `attr` | attribution/brand plates | small info plates |
 | `chart` | time-series charts | `pt_heart_pan`, `pt_pace_pan`, `pt_ele_pan` — all three are thin option objects over `definitions/chartCommon.js` |

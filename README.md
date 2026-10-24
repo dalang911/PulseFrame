@@ -47,7 +47,7 @@ Most sports-data overlay tools are desktop apps, subscription SaaS, or phone app
 
 - **Inputs:** FIT, GPX, TCX and PulseFrame's own JSON; format auto-detected, then normalised into a single schema.
 - **Derived metrics:** sparse-data repair before interpolating — altitude (a device that has not locked on yet records `0`, filled from the nearest real sample) and latitude/longitude (filled as a pair, interior gaps bridged in a straight line so the map does not teleport), per-second linear interpolation, slope, cumulative ascent/descent, azimuth/heading, map projection points, chart coordinates.
-- **48 built-in components** across the palette categories `background`, `text`, `time`, `distance`, `chart`, `attr` (gauges), `map` and `cycling` — heart-rate / pace / elevation charts (each one's aspect ratio is adjustable from 1:1 to 1:8, so a long ride can fill a wide canvas; the corner icon stays pinned to the corner at any width, and the current-value label can either stay bottom-pinned, as it always did, or follow the playhead dot), heart, pace, speed, cadence, rpm and power gauges, distance bars & rulers, lap tables, date-time and weather panels, web map & compass.
+- **54 built-in components** across the palette categories `background`, `text`, `time`, `distance`, `chart`, `attr` (gauges), `map` and `cycling` — heart-rate / pace / elevation charts (each one's aspect ratio is adjustable from 1:1 to 1:8, so a long ride can fill a wide canvas; the corner icon stays pinned to the corner at any width, and the current-value label can either stay bottom-pinned, as it always did, or follow the playhead dot), heart, pace, speed, cadence, rpm and power gauges, distance bars & rulers, lap tables, date-time panels, the two weather panels (square `200×230` and a new wide `560×200` variant — both pick from 7 icons through a labelled button group, and both expose gradient type/direction, corner radius, border, per-line text/colour/size/position and icon disc & divider knobs), web map & compass.
 - **Canvas presets:** 1920×1080 and 1080×1920; any size can be typed in.
 - **Visual designer** (`designer.html`) for drag-and-drop layout plus a property editor generated from each component's `settings` declaration.
 - **Video engine:** WebCodecs encoding via MediaBunny (H.264 `avc` / VP9), 8 Mbps default, optional alpha-preserving WebM.
@@ -133,7 +133,7 @@ pulseframe/
 ├── lib/                  # vendored jquery, layui, maptalks
 ├── bg/, icon/, images/, font/   # UI assets (see “Third-party libraries”)
 ├── samples/              # generated demo data
-├── tools/                # asset generator used to build samples/ + bg/
+├── tools/                # asset generator for samples/ + bg/, plus the browser regression pages (`chart-ratio-test.html`, `weather-test.html`, `series-repair-test.html`, `field-parity.html`)
 └── docs/                 # developer documentation (English; zh/ = originals)
 ```
 

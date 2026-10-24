@@ -186,6 +186,7 @@ const allDefinitions = [
 | `number` | 数字输入 | `min`, `max`, `step` |
 | `text` | 文本输入 | - |
 | `select` | 下拉选择 | `options: [{ value, label }]` |
+| `button_group` | 一行小按钮，每个按钮上直接写选项名称（如 Sunny / Cloudy / Rain），点哪个存哪个；当前值那一个亮蓝边 | `options: [{ value, label }]`（结构与 `select` 一致） |
 | `boolean` | 开关 | - |
 | `bg_image` | 预设背景图缩略图 + 本地文件输入 | - |
 | `image_picker` | 预设图片点选（点哪张用哪张）+ 可选「无」格 + 上传按钮（本地图片自动重采样成 1:1 PNG dataURL） | `presets: [{ url, name }]`, `allowNone`, `uploadText`, `uploadSize`（默认 256） |
@@ -194,6 +195,10 @@ const allDefinitions = [
 
 面板回显取 `config[key] ?? item.defaultValue ?? ''`：模板是在新增某个键之前保存的
 时，`defaultValue` 要和 `build()` 里的兜底值保持一致。
+
+`button_group` 靠「选项 value == 回显值」点亮当前档，所以这个键得能取到值：要么像两个
+天气面板那样把它列进 `defaultConfig`（每个键都列、值就等于 `build()` 的兜底值），要么给
+设置项写 `defaultValue`。`select` 没这个讲究，下拉框本身就会显示当前值。
 
 **键名要避开布局键**：`applyPropertyChange()` 把 `x`/`y`/`width`/`height`/`rotation`/
 `opacity`/`cornerRadius`/`fill`/`stroke`/`strokeWidth` 视为布局键，直接写到底层 `Box`
@@ -227,7 +232,7 @@ const allDefinitions = [
 | category | 说明 | 示例 |
 |----------|------|------|
 | `background` | 背景画布 | 纯色/渐变/图片背景 |
-| `info` | 信息显示 | 日期时间、标题、综合信息 |
+| `info` | 信息显示 | 日期时间、标题、综合信息、天气面板（方形 `el_weather_pan` 与横版 `el_weather_wide_pan`，图标表/渐变/子元素生成器共用 `definitions/weatherCommon.js`） |
 | `chart` | 图表 | 心率图、配速图、高程图（三者的布局与设置项共用 `definitions/chartCommon.js`） |
 | `gauge` | 仪表盘 | 速度表、心率表 |
 | `map` | 地图 | 路线图、GPS 轨迹 |
