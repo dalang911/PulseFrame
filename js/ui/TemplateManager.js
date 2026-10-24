@@ -10,6 +10,7 @@ import { apiBase } from '../core/appConfig.js';
 import { registry } from '../components/registry.js';
 import { addComponentToCanvas, clearAllComponents, resizeBackground } from '../components/factory.js';
 import { extractConfigDiff, mergeSavedConfig } from '../utils/configDiff.js';
+import { canvasToCoverDataUrl } from '../utils/images.js';
 
 const STORAGE_PREFIX = 'frameConfig_';
 
@@ -259,6 +260,9 @@ class TemplateManager {
 
     /**
      * 生成缩略图（截取当前画布）
+     * 长边缩到 ≤480 再出 JPEG：提交链路里 thumbnail 是整条 JSON 的一部分，
+     * 全屏画布不缩的话一张封面就能占掉几百 KB，商店列表每次翻页都要重取。
+     * 质量参数沿用升级前的 0.5，没动色彩合成，观感只差分辨率。
      * @returns {string} base64 缩略图
      */
     _generateThumbnail() {
@@ -269,7 +273,7 @@ class TemplateManager {
         if (!canvas) return '';
 
         try {
-            return canvas.toDataURL('image/jpeg', 0.5);
+            return canvasToCoverDataUrl(canvas);
         } catch (e) {
             return '';
         }
