@@ -7,6 +7,8 @@
  * 商店封面的截图也在这里：
  *   - canvasToCoverDataUrl()：把画布等比缩到长边 ≤480 再出 JPEG，只降分辨率，
  *     不改质量参数、不裁切、不填背景 —— 提交链路见 TemplateManager._generateThumbnail()
+ *   - coverCropRect() / cropCanvasToCoverDataUrl()：先按 CSS 坐标裁一块再走上面那条缩放
+ *     —— Studio 提交的组件只占画布一角，见 studio/js/StudioCanvas.js#snapshotCoverDataUrl
  *
  * 为什么拉伸而不是裁切：头像是被圆角裁成圆形的，非正方形原图直接拉伸最直观
  * （整张脸都在），而居中裁切会切掉画面边缘，用户难以预期结果。
@@ -134,4 +136,56 @@ export function canvasToCoverDataUrl(canvas, opts = {}) {
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(srcCanvas, 0, 0, t.w, t.h);
     return out.toDataURL(mime, quality);
+}
+
+/**
+ * 纯计算：把「CSS 像素下的裁剪框」换算成源画布的背板像素矩形（无 DOM，便于单独验证）
+ *
+ * 为什么要有这一步：Leafer / 浏览器按 devicePixelRatio 建画布，画布的 width 是背板像素、
+ * 不是 CSS 像素，直接用屏幕坐标去 drawImage 会错位（DPR=2 时只截到左上四分之一）。
+ * 越界按「交集」处理：负坐标不是把窗口整体挪进画布，而是把伸出去的那截丢掉（x=-50,w=200
+ * 只取到宽 150），否则封面会多带上一段本来不在框里的内容。
+ * @param {number} canvasWidth 源画布背板宽（canvas.width）
+ * @param {number} canvasHeight 源画布背板高（canvas.height）
+ * @param {number} cssWidth 源画布的 CSS 宽（画布自己认为的坐标系宽度）
+ * @param {{x:number,y:number,w:number,h:number}} rect CSS 坐标系里的裁剪框
+ * @returns {{sx:number,sy:number,sw:number,sh:number,ratio:number}|null} 交集不足 1px 返回 null
+ */
+export function coverCropRect(canvasWidth, canvasHeight, cssWidth, rect) {
+    const cw = Math.floor(Number(canvasWidth) || 0);
+    const ch = Math.floor(Number(canvasHeight) || 0);
+    const vw = Number(cssWidth) || 0;
+    if (cw <= 0 || ch <= 0 || vw <= 0 || !rect) return null;
+    const ratio = cw / vw;                       // 背板像素 / CSS 像素，即这台设备的 DPR
+    const sx = Math.max(0, Math.floor((Number(rect.x) || 0) * ratio));
+    const sy = Math.max(0, Math.floor((Number(rect.y) || 0) * ratio));
+    const sw = Math.max(0, Math.min(cw, Math.round(((Number(rect.x) || 0) + (Number(rect.w) || 0)) * ratio))) - sx;
+    const sh = Math.max(0, Math.min(ch, Math.round(((Number(rect.y) || 0) + (Number(rect.h) || 0)) * ratio))) - sy;
+    if (sw < 1 || sh < 1) return null;
+    return { sx, sy, sw, sh, ratio };
+}
+
+/**
+ * 从画布里裁一块，再等比缩到长边 ≤480 出商店封面
+ *
+ * 给「组件只占画布一角」的场合用（Studio 提交：画布四周是留白，整截会把组件稀释没）。
+ * 缩放、质量、mime 全部沿用 canvasToCoverDataUrl，两条提交链路的封面口径保持一致。
+ * @param {HTMLCanvasElement} canvas 源画布
+ * @param {{x:number,y:number,w:number,h:number}} rect CSS 坐标系里的裁剪框
+ * @param {number} cssWidth 源画布的 CSS 宽
+ * @param {{maxEdge?:number, quality?:number, mime?:string}} [opts] 透传给 canvasToCoverDataUrl
+ * @returns {string} dataURL；裁剪框不合法时返回 ''
+ */
+export function cropCanvasToCoverDataUrl(canvas, rect, cssWidth, opts = {}) {
+    if (!canvas || typeof canvas.toDataURL !== 'function') return '';
+    const crop = coverCropRect(canvas.width, canvas.height, cssWidth, rect);
+    if (!crop) return '';
+    const out = document.createElement('canvas');
+    out.width = crop.sw;
+    out.height = crop.sh;
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(canvas, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.sw, crop.sh);
+    return canvasToCoverDataUrl(out, opts);
 }

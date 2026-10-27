@@ -10,6 +10,10 @@ import { specStore } from './SpecStore.js';
 import { LAYER_TAG, flattenLayers, normalizeArcProps, resolveSvgProps } from './runtime/spec.js';
 import { applyLayerBindings } from './runtime/bindingEngine.js';
 import { THEME_EVENT } from './ThemeManager.js';
+// 商店封面的缩放/出图口径与主编辑器共用一份实现（images.js 自身零依赖，静态引入不绕环；
+// Studio 早就通过 ../site.config.js 和 FrontendGauges 的动态 import 走到仓库外层，跨目录引用不是新增的例外）。
+// 宁可共用也不各留一份：两条提交链路的封面尺寸/质量参数只要有一个数不同，商店里就会出现两种观感。
+import { cropCanvasToCoverDataUrl } from '../../js/utils/images.js';
 
 const FIT_PAD = 0.82;
 
@@ -287,6 +291,40 @@ class StudioCanvas {
 
     /** 退出预览：恢复设计值 */
     exitPreview() { this.render(); }
+
+    /**
+     * 组件框（#studioBounds 那块）→ 商店封面 dataURL，Studio 提交链路用。
+     *
+     * 为什么裁而不整截画布：Studio 视口四周是留白（画板底 + FIT_PAD 余量），组件只占中间一块；
+     * 商店卡片位只有 80×60，整截等于把组件缩到一角。#studioBounds 的 x/y/width/height 就是
+     * meta.width×height 在当前视图里的落位，含组件底板色，跟用户认知的「组件区域」一致。
+     * 图层超出 meta 尺寸的部分会被裁掉 —— 那是设计稿本身越界，不该指望封面替它兜。
+     *
+     * 取 canvas 时排掉编辑器那一张：实测 leafer App 在 .leafer-app-view 下建两张画布，
+     * 第二张（absolute）是编辑器覆盖层，选中框/手柄画在它上面，拿它会把手柄一起提交进封面。
+     * 出图口径沿用编辑器侧 js/ui/TemplateManager.js：长边 ≤480、JPEG q0.5，与后端 128KB 体积闸匹配。
+     * @returns {string} dataURL；画布没起来、裁剪框非法、画布被外链图片污染时返回 ''
+     */
+    snapshotCoverDataUrl() {
+        const view = this._app && this._app.canvas && this._app.canvas.view;   // DIV.leafer-app-view
+        const bounds = this._frame && this._frame.findOne ? this._frame.findOne('#studioBounds') : null;
+        if (!view || !bounds) return '';
+        const editorCanvas = this._app.editor && this._app.editor.leafer
+            && this._app.editor.leafer.canvas && this._app.editor.leafer.canvas.view;
+        const canvas = [...view.querySelectorAll('canvas')].find((c) => c !== editorCanvas)
+            || view.querySelector('canvas');
+        if (!canvas || typeof canvas.toDataURL !== 'function') return '';
+        try {
+            this._forceRender();   // 页面刚切过来 / 后台标签时最后一帧可能还没落画布
+            return cropCanvasToCoverDataUrl(canvas,
+                { x: bounds.x, y: bounds.y, w: bounds.width, h: bounds.height },
+                this._view.width) || '';
+        } catch (e) {
+            // SecurityError（画布被跨域图片污染）最典型：静默降级成「没封面」，别把提交打断
+            console.warn('[StudioCanvas] 封面截图失败：', e && e.message);
+            return '';
+        }
+    }
 
     setZoom(z) {
         this._zoom = z;

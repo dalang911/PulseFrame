@@ -2,7 +2,7 @@
  * studio/SubmitDialog.js - 提交组件到公共库（走后端审核流程）
  *
  * 采集 名称/分类/作者/描述 → 更新 spec.meta → POST api.php?action=submit（kind=component，
- * json_content=组件 Spec）。复用 TemplateShop 的提交/审核契约：提交后 status=pending，
+ * json_content=组件 Spec，thumbnail=从设计画布裁出的组件框截图）。复用 TemplateShop 的提交/审核契约：提交后 status=pending，
  * 管理员审核通过(approved)后由 loader 的 list&kind=component 拉取发布。
  *
  * 弹窗里带一段审核/授权说明（.sp-terms）+ 同意勾选（#sdAgree）：公开就要接受管理员改稿、可能被拒，
@@ -10,6 +10,7 @@
  */
 
 import { specStore } from './SpecStore.js';
+import { studioCanvas } from './StudioCanvas.js';
 import { apiBase } from './lib/appConfig.js';
 import { validateSpec } from './lib/validateSpec.js';
 import { findIdConflict, nextCandidateId } from './lib/idGuard.js';
@@ -107,6 +108,24 @@ class SubmitDialog {
         return cand;
     }
 
+    /**
+     * 现取一张组件封面（裁 Studio 画布的组件框，实现见 StudioCanvas#snapshotCoverDataUrl）。
+     * 失败不拦提交：没封面只是商店卡片显示 No preview，spec 照样进审核队列，
+     * 后端对空 thumbnail 是「存空串 + 200」而不是报错。这里只把原因写进弹窗，别让人以为传上了。
+     * @returns {string} dataURL 或 ''
+     */
+    _cover() {
+        let url = '';
+        try {
+            url = studioCanvas.snapshotCoverDataUrl() || '';
+        } catch (e) {
+            console.warn('[SubmitDialog] 封面生成异常：', e && e.message);
+            url = '';
+        }
+        if (!url) this._hint('No cover captured — the shop card will show "No preview". The component itself is still submitted.');
+        return url;
+    }
+
     /** POST 一次，返回解析后的 JSON（失败抛异常交给调用方统一提示） */
     async _post(payload) {
         const res = await fetch(`${apiBase()}?action=submit`, {
@@ -170,7 +189,11 @@ class SubmitDialog {
             author,
             description,
             kind: 'component',
-            json_content: specStore.exportString()
+            json_content: specStore.exportString(),
+            // 提交时顺手把画布上那块组件框截下来当封面。以前这条链路根本不发 thumbnail，
+            // 后端对空封面是「存空串 + 200」不报错，于是商店卡片一律 No preview —— 用户看见的
+            // 「为什么没封面」就是这么来的。拿不到图时留空串，行为与升级前一致。
+            thumbnail: this._cover()
         };
 
         const btn = m.querySelector('#sdSubmit');
