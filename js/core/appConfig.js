@@ -17,7 +17,7 @@
  * this is normally a file rather than inline markup:
  *   <script>
  *     window.PULSEFRAME_CONFIG = {
- *         apiBase: 'https://sportsfile.data4u.vip/server/api.php',
+ *         apiBase: 'https://pulseframe.data4u.vip/server/api.php',
  *         amapKey: 'your-own-key',
  *     };
  *   </script>

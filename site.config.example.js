@@ -22,9 +22,11 @@
  *     how a store authenticates users and guards its write side is deliberately
  *     not documented here, since that belongs to the store, not to this frontend.
  *     Set apiBase to '' to derive the URL from your own hosting layout instead
- *     (docs/DEPLOYMENT.md §3 has the rule — note that the derivation only finds
- *     a store sitting next to the app folder, which is NOT how the live
- *     pulseframe.data4u.vip instance is arranged).
+ *     (docs/DEPLOYMENT.md §3 has the rule). It is kept explicit on this build
+ *     even though the live store now happens to sit next to the app folder: the
+ *     derivation only ever points at the origin you are reading the page from,
+ *     so a local clone or a preview URL would derive a store that does not exist
+ *     there and the Shared panel would come back empty.
  *   - amapKey is a demo key published in a public repository on purpose so that
  *     a fresh clone renders the AMap layers. Treat it as rate-limited: every
  *     quota blow-up lands on the owner, so please do not hammer it. Apply for
@@ -33,7 +35,7 @@
  */
 
 window.PULSEFRAME_CONFIG = {
-    apiBase: 'https://sportsfile.data4u.vip/server/api.php',
+    apiBase: 'https://pulseframe.data4u.vip/server/api.php',
 
     /**
      * Per-host overrides, used when the same build serves several domains

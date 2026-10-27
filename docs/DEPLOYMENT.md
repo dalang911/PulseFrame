@@ -57,7 +57,7 @@ and renders the map components immediately:
 ```js
 window.PULSEFRAME_CONFIG = {
     // points at the public demo store; set to '' to derive from your own URL
-    apiBase: 'https://sportsfile.data4u.vip/server/api.php',
+    apiBase: 'https://pulseframe.data4u.vip/server/api.php',
     apiBaseByHost: {
         // only needed when the store lives on a different origin than the app
         // 'www.example.com': 'https://api.example.com/server/api.php',
@@ -137,17 +137,18 @@ The public demo runs at:
 ```
 https://pulseframe.data4u.vip/              frontend (this repo, built by Cloudflare Pages)
 https://pulseframe.data4u.vip/studio/       PulseFrame Studio
-https://sportsfile.data4u.vip/server/api.php   shared store (apiBase)
+https://pulseframe.data4u.vip/server/api.php   shared store (apiBase)
 ```
 
-Frontend and store sit on **different hosts** here, so the derived default does
-*not* resolve correctly on this instance — `https://pulseframe.data4u.vip` would
-derive `https://pulseframe.data4u.vip/server/api.php`, which does not exist. The
-tracked `site.config.example.js` sets `apiBase` to the store above for exactly
-this reason, and because Pages builds straight from the repository it is also
-what the live site runs on. Leave `apiBase` empty only when your own store really
-is a sibling of the app folder; otherwise set `apiBase` (or an `apiBaseByHost`
-entry).
+Frontend and store share one host here: the store is a separate deployment (it is
+not in this repository) that is routed onto `/server/*` of the same custom domain,
+so a Pages build of this repo and the store answer under one origin and the
+browser makes no cross-origin call. That also means the derived default *would*
+resolve on this instance — `apiBase` is still filled in because the derivation
+only ever points at the origin you are reading the page from, so a local clone or
+a preview URL would derive a store that does not exist there. Set `apiBase` to
+`''` when your own store genuinely is a sibling of the app folder; otherwise set
+`apiBase` (or an `apiBaseByHost` entry).
 
 ## 5. Optional: no store at all
 

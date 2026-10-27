@@ -93,7 +93,7 @@ works out of the box:
 
 ```js
 window.PULSEFRAME_CONFIG = {
-    apiBase: 'https://sportsfile.data4u.vip/server/api.php',
+    apiBase: 'https://pulseframe.data4u.vip/server/api.php',
     apiBaseByHost: {
         // 'www.example.com': 'https://api.example.com/server/api.php',
     },
