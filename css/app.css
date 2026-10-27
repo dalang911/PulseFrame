@@ -274,18 +274,19 @@ html, body {
     justify-content: center;
 }
 
-/* Shared 卡片：上下结构 —— 1:1 通栏概览图在上，信息在下 */
+/* Shared 卡片（面板内联）：横排小封面 —— 左栏只有 270px 宽，竖排大图一屏只看得到一两条；
+   想看大封面点面板里的「Open Library」（与 Studio 同一套设计）。 */
 .custom-comp-card.src-shared {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
     gap: 8px;
+    padding: 6px 8px;
 }
 
 .cc-media {
-    width: 100%;
-    max-width: 240px;
-    margin: 0 auto;
-    aspect-ratio: 1 / 1;
+    flex: none;
+    width: 48px;
+    height: 48px;
     border-radius: 5px;
     background: linear-gradient(135deg, #3B3B4D, #5A5A75);
     color: #fff;
@@ -303,11 +304,12 @@ html, body {
 }
 
 .cc-media-fallback {
-    font-size: 42px;
+    font-size: 20px;
     font-weight: 700;
 }
 
 .cc-body {
+    flex: 1;
     min-width: 0;
 }
 
@@ -322,8 +324,24 @@ html, body {
 }
 
 .custom-comp-card.src-shared .cc-actions {
-    margin-top: 6px;
+    align-self: center;
     justify-content: flex-end;
+}
+
+/* Shared 面板的动作行：Open Library（看大图）/ Refresh */
+.cc-actions-row {
+    flex: none;
+    display: flex;
+    gap: 6px;
+    margin: 0 8px 8px;
+}
+
+.cc-actions-row .layui-btn {
+    flex: none;
+    margin: 0;
+    height: 22px;
+    line-height: 20px;
+    padding: 0 8px;
 }
 
 .cc-desc {
@@ -334,6 +352,11 @@ html, body {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+/* 横排小卡片里描述只留一行，窄栏才排得下 */
+.custom-comp-card.src-shared .cc-desc {
+    -webkit-line-clamp: 1;
 }
 
 /* 分页加载提示（Shared 面板滚动到底续拉） */

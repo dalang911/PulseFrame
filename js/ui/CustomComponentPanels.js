@@ -16,8 +16,12 @@ import { canvasManager } from '../core/CanvasManager.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { safeThumb } from '../core/appConfig.js';
 import { loadLocalComponents, LOCAL_PREFIX, REMOTE_EVENT, fetchRemoteRows, ensureRowRegistered, REMOTE_PAGE } from '../components/visual/loader.js';
+import { openSharedLibrary } from './SharedLibraryModal.js';
 
 const CAT_LABELS = { running: 'Running', cycling: 'Cycling', swimming: 'Swimming', time: 'Time', distance: 'Distance', map: 'Map', chart: 'Chart', attr: 'Attribute', text: 'Text', theme: 'Theme' };
+
+/** 「Open Library」弹窗一次拉多少条（服务端 list 的 limit 上限是 500） */
+const LIBRARY_LIMIT = 200;
 
 const escText = (v) => String(v == null ? '' : v).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 const escAttr = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -264,6 +268,36 @@ class RemotePanel {
         }
     }
 
+    /**
+     * 打开「Open Library」弹窗：一次把整库拉出来，用大封面网格展示。
+     *
+     * 左栏只有 270px 宽，内联列表再密也看不了几个 —— 弹窗是一块独立的大画布，
+     * 与 Studio 工具栏的「Open Library」是同一份实现与样式（js/ui/SharedLibraryModal.js
+     * + css/shared-library.css），两边观感一致。
+     *   点卡片   = 加到主画布（与内联卡片的 ＋ 一样）
+     *   卡片 ✎  = 到 Studio 里打开同一份
+     */
+    async _openLibrary() {
+        const btn = this._container && this._container.querySelector('[data-act="library"]');
+        if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+        let rows = [];
+        try {
+            const res = await fetchRemoteRows(LIBRARY_LIMIT, 0, '');
+            rows = res.rows || [];
+        } catch (e) { /* 网络失败：弹窗里显示空态 */ }
+        if (btn) { btn.disabled = false; btn.textContent = 'Open Library'; }
+        openSharedLibrary({
+            rows,
+            title: 'Shared Library',
+            wide: true,
+            placeholder: 'Search name / author / category / description…',
+            pickTitle: 'Click to add to canvas',
+            noItemsText: 'No shared components yet',
+            onPick: (row) => this._add(row),
+            onOpenStudio: (row) => this._edit(row)
+        });
+    }
+
     render() {
         if (!this._container) return;
         // innerHTML 重建会丢焦点：先记录搜索框是否在聚焦中及光标位置，重建后恢复。
@@ -275,7 +309,10 @@ class RemotePanel {
         let html = `
             <div class="custom-comp-head">
                 <span>${this._ui.title}<span class="cch-count">${this._rows.length}${this._total ? '/' + this._total : ''}</span></span>
-                <button class="layui-btn layui-btn-xs layui-btn-primary" data-act="refresh" style="height:22px;line-height:20px;">Refresh</button>
+            </div>
+            <div class="cc-actions-row">
+                <button type="button" class="layui-btn layui-btn-xs layui-btn-normal" data-act="library">Open Library</button>
+                <button type="button" class="layui-btn layui-btn-xs layui-btn-primary" data-act="refresh">Refresh</button>
             </div>
             <div class="cc-search">
                 <input type="search" class="cc-search-input" placeholder="Search name / author / description…" value="${escAttr(this._keyword)}">
@@ -328,6 +365,8 @@ class RemotePanel {
 
         const rf = this._container.querySelector('[data-act="refresh"]');
         if (rf) rf.addEventListener('click', (e) => { e.stopPropagation(); this.loadPage(true); });
+        const lb = this._container.querySelector('[data-act="library"]');
+        if (lb) lb.addEventListener('click', (e) => { e.stopPropagation(); this._openLibrary(); });
         this._container.querySelectorAll('[data-row-id]').forEach(el => {
             el.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -350,7 +389,8 @@ class RemotePanel {
         const def = this._defFor(row.id);
         const size = def ? `${def.defaultConfig?.width || '?'}×${def.defaultConfig?.height || '?'}` : '';
         const meta = [cat, size, '#' + row.id, row.created_at].filter(Boolean).join(' · ');
-        // 上下结构：1:1 通栏概览图在上，信息在下；作者名称必展示（缺失时占位）。
+        // 横排结构：小封面在左、信息在中、动作在右（窄栏里能一屏看到更多条）；
+        // 想看大封面走面板里的「Open Library」弹窗。
         return `
             <div class="custom-comp-card src-shared" data-row-id="${escAttr(row.id)}" title="Click to add to canvas">
                 <div class="cc-media${thumb ? ' cc-img' : ''}">${thumb ? `<img src="${escAttr(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="cc-media-fallback">${escText(initial)}</span>`}</div>
@@ -359,10 +399,10 @@ class RemotePanel {
                     <div class="cc-author">${row.author ? '👤 ' + escText(row.author) : '👤 —'}</div>
                     <div class="cc-meta">${escText(meta)}</div>
                     ${row.description ? `<div class="cc-desc">${escText(row.description)}</div>` : ''}
-                    <div class="cc-actions">
-                        <button type="button" class="cc-btn cc-add" data-act="add" title="Add to canvas">+</button>
-                        <button type="button" class="cc-btn cc-edit" data-act="edit" title="Open in Studio">&#9998;</button>
-                    </div>
+                </div>
+                <div class="cc-actions">
+                    <button type="button" class="cc-btn cc-add" data-act="add" title="Add to canvas">+</button>
+                    <button type="button" class="cc-btn cc-edit" data-act="edit" title="Open in Studio">&#9998;</button>
                 </div>
             </div>`;
     }

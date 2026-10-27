@@ -191,6 +191,7 @@ unaffected. Tile-provider attribution obligations are listed in
 | `TemplateShop.js` | **Shared** templates from the store; renders `thumbnail` through `safeThumb()` and every text field through `escapeHtml()` |
 | `SettingsPanel.js`, `PropertyRenderer.js` | Panels generated from a component's `settings` declaration. A change runs `definition.onSettingChange(box, key, value, config)` first (a component may resize its own box — the chart `ratio` widens it), then `applyPropertyChange()`; non-layout keys end in `rebuildBoxChildren()`, which re-derives the design size from `designSize(config)` and rebuilds the children against the current box size |
 | `CustomComponentPanels.js` | **Local** and **Shared** component palettes |
+| `SharedLibraryModal.js` | **Open Library** modal, shared by the root editor's *Shared* panel and Studio — one implementation, so both look the same. Cards come from `libraryCardHtml()`; the row's cover goes through the `safeThumb()` whitelist, every text field through `escapeHtml()`. Styles live in `css/shared-library.css` (loaded by `index.html` and `studio/index.html`), which resolves colours from the Studio `--sp-*` variables and falls back to the light palette outside Studio |
 | `WidgetPicker.js`, `AlignTools.js`, `CanvasResizer.js`, `VideoPanel.js`, `UnitConfigDialog.js` | editing affordances |
 
 ## 8. Store API

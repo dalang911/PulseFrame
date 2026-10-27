@@ -25,6 +25,8 @@ import { registerVisualComponent } from './runtime/visualFactory.js';
 import { loadCustomComponents, LOCAL_PREFIX } from './runtime/loader.js';
 import { apiBase } from './lib/appConfig.js';
 import { DEMO_RQ } from './demoData.js';
+// 公共库弹窗：与主编辑器 Shared 面板共用同一份实现（仓库根 js/ui/ 下），两边观感一致
+import { openSharedLibrary } from '../../js/ui/SharedLibraryModal.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -367,53 +369,16 @@ class StudioApp {
     /**
      * 公共库卡片弹窗：1:1 概览图 + 名称/作者/分类，顶部搜索条本地过滤
      * （名称/作者/分类/描述，与主编辑器 Shared 面板的服务端搜索同字段）。
+     *
+     * 实现与样式都在仓库根的 js/ui/SharedLibraryModal.js + css/shared-library.css，
+     * 主编辑器 Shared 面板的「Open Library」用的是同一份 → 两边观感一致，不会各改各的。
      */
     _libraryDialog(rows) {
-        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-        // thumbnail 来自用户/后台提交：只放行 https 与 base64 图片，防 javascript: 注入。
-        const safeThumb = (u) => {
-            const v = String(u || '').trim();
-            return /^(https:\/\/[^\s"'<>\\]+$|data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$)/i.test(v) ? v : '';
-        };
-        const cardHtml = (r) => {
-            const thumb = safeThumb(r.thumbnail);
-            const name = r.title || ('#' + r.id);
-            const initial = String(name).trim().charAt(0).toUpperCase() || 'C';
-            return `
-                <div class="sp-lib-card" data-db-id="${esc(r.id)}" title="Import to canvas">
-                    <div class="sp-lib-media">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="sp-lib-fallback">${esc(initial)}</span>`}</div>
-                    <div class="sp-lib-name">${esc(name)}</div>
-                    <div class="sp-lib-sub">${r.author ? '👤 ' + esc(r.author) + ' · ' : '👤 — · '}#${esc(r.id)}${r.category ? ' · ' + esc(r.category) : ''}</div>
-                </div>`;
-        };
-        const filter = (kw) => {
-            const q = String(kw || '').trim().toLowerCase();
-            const list = !q ? rows : rows.filter(r =>
-                [r.title, r.author, r.category, r.description].some(v => String(v || '').toLowerCase().indexOf(q) >= 0));
-            const grid = mask.querySelector('.sp-lib-grid');
-            const cnt = mask.querySelector('.sp-lib-count');
-            if (grid) grid.innerHTML = list.length ? list.map(cardHtml).join('') : '<div class="sp-empty">No matching components</div>';
-            if (cnt) cnt.textContent = q ? `${list.length}/${rows.length}` : String(rows.length);
-        };
-        const mask = document.createElement('div');
-        mask.className = 'sp-modal show';
-        mask.innerHTML = `
-            <div class="sp-modal-content sp-lib-modal">
-                <div class="sp-modal-head"><h3>Public Library <span class="sp-lib-count">${rows.length}</span></h3><button class="sp-modal-x" data-close>&times;</button></div>
-                <div class="sp-lib-search"><input type="search" class="sp-lib-kw" placeholder="Search name / author / category / description…"></div>
-                <div class="sp-modal-body sp-lib-body"><div class="sp-lib-grid">${rows.map(cardHtml).join('')}</div></div>
-                <div class="sp-modal-foot"><button class="sp-btn" data-close>Close</button></div>
-            </div>`;
-        let kwTimer = null;
-        const kwInput = mask.querySelector('.sp-lib-kw');
-        kwInput.addEventListener('input', () => { clearTimeout(kwTimer); kwTimer = setTimeout(() => filter(kwInput.value), 200); });
-        mask.addEventListener('click', (e) => {
-            if (e.target === mask || e.target.closest('[data-close]')) { mask.remove(); return; }
-            const card = e.target.closest('.sp-lib-card');
-            if (card) { const id = card.dataset.dbId; mask.remove(); this._importSharedRow(id); }
+        openSharedLibrary({
+            rows,
+            title: 'Public Library',
+            onPick: (row) => this._importSharedRow(row.id)
         });
-        document.body.appendChild(mask);
-        kwInput.focus();
     }
 
     // ===== 通用列表选择弹窗 =====
