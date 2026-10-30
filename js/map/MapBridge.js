@@ -14,6 +14,7 @@
 
 import { eventBus, Events } from '../core/EventBus.js';
 import { store } from '../core/Store.js';
+import { samplePathPoint } from '../data/frameSampling.js';
 
 // ============================================================
 // 瓦片图源配置（maptalks 侧，均为 WGS84 境外源，老款原样搬入）
@@ -206,17 +207,22 @@ class MapBridge {
         }
 
         const path = rec.framework === 'amap' ? getGcjPath(rec.trkptRef) : getWgsPath(rec.trkptRef);
-        const index = Math.max(0, Math.min(ctx.currentFrame | 0, path.length - 1));
-        const coord = path[index];
+        // 亚秒游标：fps=1（或调用方没给 frameTime）时 t 就是整数帧号，
+        // samplePathPoint 的 frac===0 分支返回 path[index] 原对象、进度线一个点都不多 —— 与升级前逐位相同
+        const t = Number.isFinite(ctx.frameTime) ? ctx.frameTime : (ctx.currentFrame | 0);
+        const index = Math.max(0, Math.min(Math.floor(t), path.length - 1));
+        const coord = samplePathPoint(path, t);
         if (!coord) return;
 
         // 进度线 + 当前位置
+        const travelled = this._validSlice(path, 0, index + 1);
+        if (t > index && coord !== path[index]) travelled.push(coord);   // 补上亚秒头部点
         if (rec.framework === 'maptalks') {
             rec.marker.setCoordinates(coord);
-            rec.prog.setCoordinates(this._validSlice(path, 0, index + 1));
+            rec.prog.setCoordinates(travelled);
         } else {
             rec.marker.setCenter(coord);
-            rec.prog.setPath(this._validSlice(path, 0, index + 1));
+            rec.prog.setPath(travelled);
         }
 
         // 视野跟随

@@ -11,16 +11,20 @@
 import { mapToRange, douglasPeucker } from '../utils/math.js';
 import { speedToPace } from '../utils/format.js';
 
-/** 秒 → 时钟字符串：<1h 为 m:ss，否则 h:mm:ss（与两处 bindingEngine 的实现一致） */
-function fmtClock(total) {
+/**
+ * 秒 → 时钟字符串：<1h 为 m:ss，否则 h:mm:ss（与两处 bindingEngine 的实现一致）
+ * 导出给 frameSampling.js 复用：亚秒插值出来的 elapsedTime / remainTime 必须与
+ * 逐秒物化的那批用同一个格式化口径，否则同一条轨迹会渲染出两种时间文本。
+ */
+export function fmtClock(total) {
     total = Math.max(0, Math.round(total || 0));
     const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
     const p = (n) => String(n).padStart(2, '0');
     return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`;
 }
 
-/** 保留有效位，避免把长浮点写进逐秒轨迹点 */
-const round = (value, digits) => {
+/** 保留有效位，避免把长浮点写进逐秒轨迹点（同样供 frameSampling.js 使用） */
+export const round = (value, digits) => {
     const f = 10 ** digits;
     return Math.round((Number(value) || 0) * f) / f;
 };

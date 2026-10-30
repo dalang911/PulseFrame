@@ -282,7 +282,11 @@ const pl_heart_pan = {
         const heartRates = [];
         for (let i = 0; i < 10; i++) {
             const idx = ctx.currentFrame - i;
-            heartRates.push(idx >= 0 && trkpt[idx] ? (trkpt[idx].heart_rate || 0) : 0);
+            // i===0 取当前帧的心率，跟上面那个大数字同源（亚秒细化后两者才不会各说各话）；
+            // fps=1 时 frameData 就是 trkpt[currentFrame]，这一项逐位不变。
+            // 回看窗口继续按「秒空间」往前数 10 条 —— 加密帧率不该把它变成 10/N 秒。
+            heartRates.push(i === 0 ? heart_rate
+                : (idx >= 0 && trkpt[idx] ? (trkpt[idx].heart_rate || 0) : 0));
         }
 
         const width = box.width * 0.75;

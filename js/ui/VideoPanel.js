@@ -7,6 +7,19 @@ import { store } from '../core/Store.js';
 import { generateVideo, abortRender } from '../renderer/frameRenderer.js';
 import { mapBridge } from '../map/MapBridge.js';
 import { secondsToHHMMSS } from '../utils/format.js';
+import { VIDEO_DEFAULTS, VIDEO_FPS_PRESETS, VIDEO_FPS_MAX, normalizeVideoFps } from '../core/constants.js';
+
+/** 单次渲染的建议帧数上限：弹窗里那句「长视频分批」的口径（原来是按秒算，现在要按帧算） */
+const RENDER_CHUNK_HINT = 5000;
+
+/** 帧率那一行的悬停说明：讲清楚「时长不变、只是更细」，避免被当成倍速 */
+const FPS_HELP = 'Frames per second.\n'
+    + '1 = one trackpoint fills one second (the original behaviour).\n'
+    + 'N > 1 spreads the same trackpoints over N frames each, so numbers, needles, the map\n'
+    + 'and the chart cursor glide instead of stepping once per second. Values between two\n'
+    + 'trackpoints are linearly interpolated (10 -> 12 shows 10.25, 10.5, 10.75).\n'
+    + 'The video length does NOT change: one second of data is still one second of video.\n'
+    + 'What grows is the frame count and the render time (x N).';
 
 const CHECKER_BG = 'background-color: #fff; background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), '
     + 'linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), '
@@ -98,9 +111,17 @@ class VideoPanel {
 
         const fmtTime = idx => secondsToHHMMSS(trkpt[idx] ? trkpt[idx].sec : 0);
 
+        // 帧率初值沿用上次导出选择（store.videoFps），非法值一律先归一化
+        const fpsNow = normalizeVideoFps(store.get('videoFps'));
+        const fpsIsPreset = VIDEO_FPS_PRESETS.includes(fpsNow);
+        const fpsOptions = VIDEO_FPS_PRESETS
+            .map(v => `<option value="${v}"${v === fpsNow ? ' selected' : ''}>${v} fps${v === 1 ? ' (default)' : ''}</option>`)
+            .join('')
+            + `<option value="custom"${fpsIsPreset ? '' : ' selected'}>Custom…</option>`;
+
         this._setupIndex = this._layer.open({
             type: 1,
-            area: ['440px', '420px'],
+            area: ['440px', '500px'],
             title: 'Video Setup',
             content: `
                 <div style="padding: 12px;">
@@ -121,6 +142,18 @@ class VideoPanel {
                         </label>
                     </div>
 
+                    <div style="margin: 0 0 12px; padding: 10px; border: 1px solid #eee; border-radius: 4px;">
+                        <label style="display: inline-block; width: 74px;">Frame rate</label>
+                        <select id="vFpsSelect" style="width: 110px;">${fpsOptions}</select>
+                        <input type="number" id="vFpsCustom" min="1" max="${VIDEO_FPS_MAX}" step="1"
+                            value="${fpsNow}"
+                            style="display: none; width: 64px; margin-left: 6px;">
+                        <span id="vFpsHelp" title="${FPS_HELP}"
+                            style="display: inline-block; width: 16px; height: 16px; line-height: 14px;
+                                   text-align: center; margin-left: 6px; border: 1px solid #bbb;
+                                   border-radius: 50%; color: #888; font-size: 12px; cursor: help;">?</span>
+                    </div>
+
                     <div style="margin-bottom: 8px;">
                         <label style="display: inline-block; width: 60px;">Start</label>
                         <input type="number" id="vStartFrame" min="0" max="${maxFrame - 1}" value="0"
@@ -139,6 +172,7 @@ class VideoPanel {
                         <span> | Total Time: ${fmtTime(maxFrame - 1)}</span>
                     </div>
                     <div id="vFrameCount" style="margin-bottom: 8px; color: #888;"></div>
+                    <div id="vRenderHint" style="margin-bottom: 8px; color: #e74c3c;"></div>
 
                     <button class="layui-btn layui-btn-normal" id="btnStartGenerate">Start Generate</button>
                 </div>
@@ -146,14 +180,37 @@ class VideoPanel {
             success: () => {
                 const startInput = document.getElementById('vStartFrame');
                 const endInput = document.getElementById('vEndFrame');
+                const select = document.getElementById('vFpsSelect');
+                const custom = document.getElementById('vFpsCustom');
                 const onChange = () => this._validateFrames();
+                const syncFpsVisibility = () => {
+                    if (custom) custom.style.display = select.value === 'custom' ? 'inline-block' : 'none';
+                };
                 startInput.addEventListener('change', onChange);
                 endInput.addEventListener('change', onChange);
+                select.addEventListener('change', () => { syncFpsVisibility(); onChange(); });
+                if (custom) custom.addEventListener('change', onChange);
                 document.getElementById('btnStartGenerate')
                     .addEventListener('click', () => this._startGenerate());
+                syncFpsVisibility();
                 this._validateFrames();
             }
         });
+    }
+
+    /**
+     * 读弹窗里选的帧率：钳制规则只有一处（constants.normalizeVideoFps），
+     * 越界或填小数时把钳制结果写回输入框，让用户看得见最终值（跟 Start/End 一样）
+     * @returns {number} 1 ~ VIDEO_FPS_MAX 的整数
+     */
+    _readFps() {
+        const select = document.getElementById('vFpsSelect');
+        const custom = document.getElementById('vFpsCustom');
+        if (!select) return normalizeVideoFps(store.get('videoFps'));
+        if (select.value !== 'custom') return normalizeVideoFps(select.value);
+        const fps = normalizeVideoFps(custom ? custom.value : null);
+        if (custom && Number(custom.value) !== fps) custom.value = fps;
+        return fps;
     }
 
     /**
@@ -178,12 +235,31 @@ class VideoPanel {
         const st = document.getElementById('vStartFrameTime');
         const et = document.getElementById('vEndFrameTime');
         const fc = document.getElementById('vFrameCount');
+        const hint = document.getElementById('vRenderHint');
         if (st) st.textContent = `time: ${secondsToHHMMSS(trkpt[start].sec)}`;
         if (et) et.textContent = `time: ${secondsToHHMMSS(trkpt[end].sec)}`;
-        if (fc) fc.textContent = `${end - start + 1} frames total (1 frame = 1 second, output ≈ ${end - start + 1} s)`;
+
+        // Start/End 一直是「秒空间」的轨迹点范围，帧率只加密这一段：
+        // 帧数 = 秒数 × fps，成片时长仍等于秒数 —— 文案把这个区别说清楚，别让人当成倍速。
+        const fps = this._readFps();
+        const seconds = end - start + 1;
+        const frames = seconds * fps;
+        if (fc) {
+            fc.textContent = fps === 1
+                ? `${seconds} frames total (1 frame = 1 second, output ≈ ${seconds} s)`
+                : `${seconds} s of data × ${fps} frame/s = ${frames} frames, output ≈ ${seconds} s (length unchanged)`;
+        }
+        if (hint) {
+            hint.textContent = frames > RENDER_CHUNK_HINT
+                ? `Heads-up: ${frames} frames is over the 5000-frame chunk suggested above `
+                  + `(that is ${Math.floor(RENDER_CHUNK_HINT / fps)} s of data at ${fps} frame/s). `
+                  + 'Video length still ' + seconds + ' s; only render time grows.'
+                : '';
+        }
 
         store.set('startFrame', start, true);
         store.set('endFrame', end, true);
+        store.set('videoFps', fps, true);
     }
 
     // ==================================================
@@ -197,6 +273,8 @@ class VideoPanel {
         const startFrame = Math.max(0, Math.min(Number.isFinite(startRaw) ? startRaw : 0, maxFrame - 1));
         const endFrame = Math.min(maxFrame - 1, Number.isFinite(endRaw) ? Math.max(endRaw, startFrame) : maxFrame - 1);
         const videoFormat = document.querySelector('input[name="videoFormat"]:checked')?.value || 'mp4';
+        const fps = this._readFps();
+        const renderFrames = (endFrame - startFrame + 1) * fps;
 
         if (startFrame > endFrame) {
             this._toast('Start frame cannot be greater than end frame', true);
@@ -228,7 +306,7 @@ class VideoPanel {
 
         this._finished = false;
         this._startTime = Date.now();
-        this._openPreview(endFrame - startFrame + 1);
+        this._openPreview(renderFrames);
 
         try {
             // 地图预载 pass（约 5 秒）：先快速播放一遍让离屏地图预热瓦片/完成首帧渲染，
@@ -241,13 +319,14 @@ class VideoPanel {
                 startFrame,
                 endFrame,
                 videoFormat,
+                fps,
                 onProgress: (current, total) => this._updateProgress(current, total)
             });
 
             store.set('videoBlob', blob, true);
-            this._updateProgress(endFrame - startFrame, endFrame - startFrame + 1);
+            this._updateProgress(renderFrames - 1, renderFrames);
             this._showResult(blob, videoFormat);
-            this._setStatus('Video generated', false);
+            this._setStatus(`Video generated (${renderFrames / fps} s @ ${fps} frame/s)`, false);
         } catch (err) {
             const msg = err && err.message ? err.message : String(err);
             const aborted = /abort|终止/i.test(msg);

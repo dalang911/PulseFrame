@@ -26,8 +26,30 @@ export const VIDEO_DEFAULTS = {
     codec: 'avc',
     bitrate: 8_000_000,
     quality: 1,
-    format: VIDEO_FORMATS.MP4
+    format: VIDEO_FORMATS.MP4,
+    // 每秒帧数。1 = 一个轨迹点独占 1 秒，就是升级前唯一的口径；默认值必须是 1，
+    // 这样「只带老配置」的导出路径与升级前逐项相同（见 frameSampling.js 的抽稀回归）。
+    fps: 1
 };
+
+// 帧率预设（Video Setup 弹窗下拉里摆的那几档）
+export const VIDEO_FPS_PRESETS = [1, 2, 3, 4, 5, 10, 15, 25, 30];
+
+// 帧率上限：再往上是浏览器编码耗时问题，不是画质需求
+export const VIDEO_FPS_MAX = 60;
+
+/**
+ * 归一化帧率：夹成 [1, VIDEO_FPS_MAX] 的整数，非数字回落到默认 1。
+ * 弹窗那个「自定义」输入框什么都能输（0 / -1 / 2.5 / 空 / NaN），钳制只放在这一处，
+ * 渲染层与编码层拿到的都是归一化后的值；UI 再把钳制结果写回输入框，用户看得见。
+ * @param {*} value
+ * @returns {number}
+ */
+export function normalizeVideoFps(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return VIDEO_DEFAULTS.fps;
+    return Math.min(VIDEO_FPS_MAX, Math.max(1, Math.round(n)));
+}
 
 // 数据字段名规范（统一各解析器输出）
 export const DATA_FIELDS = {

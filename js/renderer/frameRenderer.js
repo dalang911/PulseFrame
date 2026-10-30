@@ -8,14 +8,19 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { leaferManager } from './LeaferManager.js';
 import { videoEngine } from './VideoEngine.js';
 import { updateAllComponents } from '../components/updater.js';
+import { normalizeVideoFps, VIDEO_DEFAULTS } from '../core/constants.js';
+import { timeOfFrame } from '../data/frameSampling.js';
 
 /**
  * 生成视频
  * @param {Object} options
- * @param {number} options.startFrame - 起始帧
- * @param {number} options.endFrame - 结束帧
+ * @param {number} options.startFrame - 起始帧（秒空间，等于轨迹点下标）
+ * @param {number} options.endFrame - 结束帧（秒空间，含）
  * @param {string} [options.videoFormat='mp4'] - 视频格式
- * @param {Function} [options.onProgress] - 进度回调 (current, total)
+ * @param {number} [options.fps] - 每秒帧数；1（默认）= 一个轨迹点独占 1 秒，
+ *        N>1 时同一批点铺成 N 帧，**成片时长不变**（帧数 ÷ N 还是那些秒数），
+ *        数值与游标按帧线性细化，见 js/data/frameSampling.js
+ * @param {Function} [options.onProgress] - 进度回调 (current, total)，稠密帧口径
  * @returns {Promise<Blob>} 视频 Blob
  */
 export async function generateVideo(options = {}) {
@@ -39,11 +44,15 @@ export async function generateVideo(options = {}) {
     endFrame = Math.max(startFrame, Math.min(endFrame, maxFrame - 1));
 
     const videoFormat = options.videoFormat || store.get('videoFormat') || 'mp4';
+    // 帧率：入参优先，其次沿用弹窗上次选择，最后回落默认 1 秒 1 帧；越界在这里钳制
+    const fps = normalizeVideoFps(options.fps != null ? options.fps
+        : (store.get('videoFps') != null ? store.get('videoFps') : VIDEO_DEFAULTS.fps));
     const onProgress = options.onProgress || (() => {});
 
     store.set('startFrame', startFrame);
     store.set('endFrame', endFrame);
     store.set('videoFormat', videoFormat);
+    store.set('videoFps', fps);
 
     const canvasSize = store.get('canvasSize') || { width: 1920, height: 1080 };
     const targetCanvas = document.getElementById('videoCanvas');
@@ -72,29 +81,36 @@ export async function generateVideo(options = {}) {
         await videoEngine.initEncoder(targetCanvas, {
             width: canvasSize.width,
             height: canvasSize.height,
-            videoFormat
+            videoFormat,
+            fps
         });
 
-        const totalFrames = endFrame - startFrame + 1;
-        console.log(`[FrameRenderer] 开始渲染 ${totalFrames} 帧 (${startFrame}~${endFrame}, ${videoFormat})`);
+        // 秒空间的帧数 = 升级前渲染的帧数；稠密后帧数 ×fps，但每帧只占 1/fps 秒，
+        // 所以成片时长 = totalFrames × (1/fps) = totalSeconds，与升级前逐秒口径一致。
+        const totalSeconds = endFrame - startFrame + 1;
+        const totalFrames = totalSeconds * fps;
+        const frameDuration = 1 / fps;
+        console.log(`[FrameRenderer] 开始渲染 ${totalFrames} 帧 (${startFrame}~${endFrame}, ${videoFormat}, ${fps} 帧/秒, 时长 ${totalSeconds} 秒)`);
 
         // 逐帧渲染
         for (let i = 0; i < totalFrames; i++) {
-            const currentFrame = startFrame + i;
-
             // 检查是否被中止
             if (!store.get('isRendering')) {
                 throw new Error('Render aborted by user');
             }
 
-            // 1. 更新组件数据（内存实例）
-            updateAllComponents(currentFrame, true);
+            // 0. 稠密帧号 → 秒时刻（可含小数）。fps=1 时 t 就是整数帧号，与升级前逐位相同；
+            //    末尾若干帧夹在 endFrame 上重复显示，那正是升级前「最后一帧独占 1 秒」的那段。
+            const t = timeOfFrame(startFrame, i, fps, endFrame);
+
+            // 1. 更新组件数据（内存实例）—— 传 t，插值发生在 updater 里
+            updateAllComponents(t, true);
 
             // 2. 导出帧到 Canvas
             await leaferManager.exportFrame(targetCanvas);
 
-            // 3. 添加到视频编码器（1秒/帧）
-            await videoEngine.addFrame(i, 1);
+            // 3. 添加到视频编码器（每帧 1/fps 秒；时间戳按 i/fps 取绝对值，不做累加）
+            await videoEngine.addFrame(i / fps, frameDuration);
 
             // 4. 进度回调
             onProgress(i, totalFrames);

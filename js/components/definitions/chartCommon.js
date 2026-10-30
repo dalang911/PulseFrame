@@ -43,6 +43,7 @@
  *    updateFn 立刻刷当前帧，不需要额外重建分支。
  */
 import { resizeScale, plotInsets } from '../../utils/math.js';
+import { sampleSeriesAt } from '../../data/frameSampling.js';
 
 /** 设计绘图区尺寸与内缩边距（三个图表共用，放大后刻度线/圆点不越界） */
 export const CHART_W = 400, CHART_H = 200, CHART_PADX = 14, CHART_PADY = 18;
@@ -444,8 +445,13 @@ export function chartUpdate(o, box, frameData, progress, ctx) {
 
     const i = ctx.currentFrame;
     if (pts.length > i * 2 + 1) {
-        const designX = inset.x(pts[i * 2]);
-        const designY = inset.y(pts[i * 2 + 1]);
+        // 亚秒游标：导出帧率 >1 时 frameTime 是小数，圆点与进度线落在两秒之间的细化位置上。
+        // frameTime 缺失（预览、老调用方）或 fps=1 时它就是整数帧号，sampleSeriesAt 走 frac===0
+        // 分支原样返回 pts[i*2] / pts[i*2+1] —— 默认观感逐位不变（曲线本身一个点都没动）。
+        const t = Number.isFinite(ctx.frameTime) ? ctx.frameTime : i;
+        const cursor = sampleSeriesAt(pts, t) || { x: pts[i * 2], y: pts[i * 2 + 1] };
+        const designX = inset.x(cursor.x);
+        const designY = inset.y(cursor.y);
         const dx = designX * scale.x;
         const dy = designY * scale.y;
         const line = byName('metrics');

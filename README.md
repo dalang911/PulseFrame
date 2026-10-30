@@ -51,6 +51,7 @@ Most sports-data overlay tools are desktop apps, subscription SaaS, or phone app
 - **Canvas presets:** 1920×1080 and 1080×1920; any size can be typed in.
 - **Visual designer** (`designer.html`) for drag-and-drop layout plus a property editor generated from each component's `settings` declaration.
 - **Video engine:** WebCodecs encoding via MediaBunny (H.264 `avc` / VP9), 8 Mbps default, optional alpha-preserving WebM.
+- **Export frame rate:** 1 frame per second is the default and the premise, but the Video Setup dialog can lay 2/3/4/5/10/15/25/30 frames — or any integer up to 60 — inside each real second. Values, gauges, chart cursors and the map playhead are linearly refined between the two track points (`js/data/frameSampling.js`), while the array itself stays one entry per second, so cumulative ascent/descent thresholds and look-back windows keep their per-second meaning. **Film length never changes**: a 60-second selection exports 60 seconds at any rate — only the frame count, and the render time, grow.
 - **Template store:** three panels — *Native* (bundled), *Local* (browser storage), *Shared* (community store).
 - **Full control of the map layer:** OpenStreetMap Humanitarian, CARTO, Esri and (optionally) AMap raster tiles.
 

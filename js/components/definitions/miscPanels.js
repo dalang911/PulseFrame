@@ -10,6 +10,7 @@
 import { unitConfig } from '../../core/UnitConfig.js';
 import { resizeScale } from '../../utils/math.js';
 import { AVATAR_PRESETS } from '../../utils/images.js';
+import { sampleSeriesAt, sliceSeriesTo } from '../../data/frameSampling.js';
 
 const textshadow = { x: 2, y: 2, blur: 0, color: '#333333' };
 
@@ -212,8 +213,11 @@ const appv_ele18_pan = {
         // 曲线由 resizeChildren 整体缩放，当前点用设计坐标回写需乘缩放比对齐
         const scale = resizeScale(box, this.defaultConfig.width, this.defaultConfig.height);
         if (pts.length > i + 1) {
-            box.children[1].x = pts[i] * scale.x;
-            box.children[1].y = pts[i + 1] * scale.y;
+            // 亚秒游标（同 chartCommon 的 chartUpdate）：fps=1 时逐位等于升级前的 pts[i]/pts[i+1]
+            const t = Number.isFinite(ctx.frameTime) ? ctx.frameTime : ctx.currentFrame;
+            const cursor = sampleSeriesAt(pts, t) || { x: pts[i], y: pts[i + 1] };
+            box.children[1].x = cursor.x * scale.x;
+            box.children[1].y = cursor.y * scale.y;
         }
     }
 };
@@ -367,16 +371,14 @@ function mapUpdate(box, frameData, progress, ctx, withRotation, scale) {
     const sx = scale ? scale.x : 1;
     const sy = scale ? scale.y : 1;
     const mapPoints = (ctx.chartData || {}).mapPoints || [];
-    const nowPoints = [];
-    for (let i = 0; i <= ctx.currentFrame; i++) {
-        nowPoints.push((mapPoints[i * 2] || 0) * sx, (mapPoints[i * 2 + 1] || 0) * sy);
-    }
-    box.children[1].points = nowPoints;
-    const cx = mapPoints[ctx.currentFrame * 2];
-    const cy = mapPoints[ctx.currentFrame * 2 + 1];
-    if (cx != null && cy != null) {
-        box.children[2].x = cx * sx;
-        box.children[2].y = cy * sy;
+    // 亚秒游标：fps=1（或调用方没给 frameTime）时 t 就是整数帧号，sliceSeriesTo 的
+    // frac===0 分支逐项等于升级前那句 for (i = 0; i <= ctx.currentFrame; i++)
+    const t = Number.isFinite(ctx.frameTime) ? ctx.frameTime : ctx.currentFrame;
+    box.children[1].points = sliceSeriesTo(mapPoints, t, sx, sy);
+    const head = sampleSeriesAt(mapPoints, t);
+    if (head && head.x != null && head.y != null) {
+        box.children[2].x = head.x * sx;
+        box.children[2].y = head.y * sy;
     }
     if (withRotation && frameData.azimuth != null) {
         box.children[2].rotation = frameData.azimuth;

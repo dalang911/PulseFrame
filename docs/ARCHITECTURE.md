@@ -111,10 +111,10 @@ react to `DATA_READY`, which carries `{ rq, chartData, mapPoints }` in one paylo
 | `processedData` | the complete `rq` object after interpolation and derived fields |
 | `trkptData` | per-second track-point array (the frame index is the array index) |
 | `chartData` | chart coordinates and extremes (see [DATA_SCHEMA.md](DATA_SCHEMA.md)) |
-| `currentFrame`, `startFrame`, `endFrame`, `maxFrame` | frame window; `maxFrame === trkptData.length` |
+| `currentFrame`, `startFrame`, `endFrame`, `maxFrame` | frame window; `maxFrame === trkptData.length`. Always **second space**: index *i* of `trkptData`, never a dense frame number |
 | `canvasSize` | `{ width, height }` |
 | `activeComponents` | `[{ id, config }]` currently on the canvas |
-| `isRendering`, `videoFormat`, `currentTemplate` | render/UI state |
+| `isRendering`, `videoFormat`, `videoFps`, `currentTemplate` | render/UI state. `videoFps` (default `1`) is the export frame rate — frames per second of *real time*; normalised to an integer 1…60 by `normalizeVideoFps()` and remembered between exports (`resetData()` does not clear it) |
 
 Leafer references (`frame`, `appview`, `memoryApp`, `memoryFrame`) are reached
 through `canvasManager`, not the store — keeping object graphs out of the state
@@ -167,8 +167,23 @@ including the `settings` → auto-generated panel mapping, is
 | Module | Role |
 |---|---|
 | `LeaferManager.js` | Owns the two Leafer worlds: the interactive one the user edits, and an in-memory one used for export. Keeping them separate is what lets export run without freezing or repainting the editor. |
-| `frameRenderer.js` | For frame *n*: set `currentFrame`, call `updateAllComponents(n, /* memory */ true)`, paint the memory canvas, hand the bitmap to the encoder. One second per frame — that is the product's core premise. |
-| `VideoEngine.js` | MediaBunny wrapper. Default `avc` @ 8 Mbps in MP4/MOV; the WebM path switches to `vp9` with `alpha: 'keep'` so the dashboard can be composited over footage. |
+| `frameRenderer.js` | Renders `totalSeconds × videoFps` frames: dense frame *f* becomes the second-space time `timeOfFrame(start, f, fps, end)` (decimal when `fps > 1`, clamped to `end` at the tail), then `updateAllComponents(t, /* memory */ true)`, paint the memory canvas, hand the bitmap to the encoder with `addFrame(f / fps, 1 / fps)`. **Duration is deliberately unchanged**: `frames / fps === seconds`, so choosing 4 fps buys smoothness, not a shorter film. |
+| `VideoEngine.js` | MediaBunny wrapper. Default `avc` @ 8 Mbps in MP4/MOV; the WebM path switches to `vp9` with `alpha: 'keep'` so the dashboard can be composited over footage. When `fps !== 1` the video track is created as `addVideoTrack(source, { frameRate: fps })`, letting MediaBunny snap every sample onto the constant-rate `1/fps` grid instead of trusting hand-written decimal timestamps; at `fps === 1` no track options are passed at all, so the container is written exactly as before. |
+
+### Two frame-number spaces
+
+Pre-computation (`interpolatePoints` → `computeAllFields`) and every array index stay in
+**second space** — one entry per second, one per track point. Only the *frame counter of the
+export loop* is dense. `js/data/frameSampling.js` is the single place that turns a dense frame
+into data: `sampleFrame(trkpt, t)` linearly refines one second into `fps` sub-positions and, at
+an integer `t`, returns `trkpt[t]` itself (same object reference), so `fps = 1` — and every
+integer frame at any `fps` — is bit-for-bit what it always was. Keeping the spaces apart is
+what protects the derived rules that are defined *per array step* (the 0.15 m Gain/Loss
+threshold, the last-10-seconds heart-rate window, Douglas-Peucker route thinning): densifying
+the array would silently redefine them, so nothing is densified except what a frame actually
+displays. `ctx.currentFrame` handed to components therefore stays an integer, and only the four
+"where is the playhead now" readers (`updater.js`, `chartCommon.js`, `miscPanels.js`,
+`MapBridge.js`) consult `ctx.frameTime`.
 
 Encoding happens entirely in the tab: there is no server-side render, and no
 frame ever leaves the machine except through whatever sharing you choose.

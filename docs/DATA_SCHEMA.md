@@ -68,9 +68,12 @@ cyclist wants `km/h` — and both readings come from the same `speed` value.
 ## 3. `trkpt[]` — the frame array
 
 After `interpolatePoints()` there is **exactly one entry per second**, and the
-array index equals the frame number: frame *n* is second *n* of the activity.
+array index equals the second number: `trkpt[n]` is second *n* of the activity.
 That one-to-one mapping is what keeps gauges, charts and the moving map in sync
-with the exported video.
+with the exported video. Export may render several *frames* per second
+(`videoFps`, default 1); frame *f* of such a render is the time
+`start + f / videoFps` in this array — the array itself is never densified, see
+§ 4.5.
 
 | Field | Type | Unit | Notes |
 |---|---|---|---|
@@ -187,6 +190,36 @@ authoritative spelling list; prefer it over literals.
 3. Pairs whose timestamps are equal or reversed are skipped with a console
    warning — corrupted exports are common, and dropping the segment beats
    producing negative time.
+
+## 4.5 Sub-second sampling (`data/frameSampling.js`)
+
+Rendering at `videoFps = N` lays N frames inside each real second. Nothing about
+the array changes: the sampler is called with a decimal *time* and blends the two
+bracketing entries on the fly. Rules, in one place:
+
+- **Decimation regression (the invariant everything else leans on).** At an
+  integer time the sampler returns `trkpt[i]` itself — the same object, not an
+  equal-looking copy. So every dense sequence replays its anchor frames exactly,
+  and `fps = 1` is byte-identical to the pre-adjustable-rate behaviour. Component
+  output is verified this way: revisit an integer second after visiting the
+  sub-frames around it and the whole Leafer tree snapshots identical.
+- Only keys present on **both** neighbours get interpolated; `is_pause` and
+  `timestamp` are never blended (step-like / absolute), `azimuth` takes the
+  shortest arc so 359°→1° passes through 0° rather than the whole dial.
+- Derived fields are not blended but **recomputed** from the interpolated point
+  with the same formulas as `fieldComputer.js` (`avgSpeed`, `avgPace`,
+  `elapsedTime`, `remainTime`, `remainDistance`, `remainKm`, `elapsedMin`), and
+  every value goes through the same `formatValue()`/rounding, so text fields never
+  grow a decimal (`06:00`, never `0:10.25`).
+- Chart cursors and the map playhead use `sampleSeriesAt` / `sliceSeriesTo` /
+  `samplePathPoint` — the same regression: at integer times they return
+  `pts[i*2], pts[i*2+1]` and `path[i]`, i.e. what the old inline indexing produced.
+- **Length is unchanged by construction**: `frames = seconds × N`, each frame is
+  `1/N` s, and the last `N-1` frames clamp onto `endFrame` (the picture holds on
+  the final second, exactly as the final 1-second frame used to). A 60-second
+  selection stays a 60-second file at any `N` — measured with MediaBunny's own
+  demuxer: `duration` 2 s and `frameRateIsConstant: true`, `averageFrameRate` 1
+  with 2 samples vs 4 with 8 samples.
 
 ## 5. Speed and cadence quirks you should know
 

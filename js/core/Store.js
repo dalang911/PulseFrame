@@ -34,6 +34,7 @@ class Store {
             // ===== 视频渲染 =====
             isRendering: false,
             videoFormat: 'mp4',
+            videoFps: 1,             // 导出帧率：1 = 1 秒 1 帧（升级前口径），>1 时时长不变、密度变大
 
             // ===== 模板 =====
             currentTemplate: null
@@ -118,6 +119,7 @@ class Store {
             activeComponents: [],
             isRendering: false,
             videoFormat: 'mp4',
+            videoFps: 1,
             currentTemplate: null
         };
         return defaults[key] ?? null;

@@ -4,7 +4,7 @@
  */
 
 import { eventBus, Events } from '../core/EventBus.js';
-import { VIDEO_DEFAULTS, VIDEO_FORMATS } from '../core/constants.js';
+import { VIDEO_DEFAULTS, VIDEO_FORMATS, normalizeVideoFps } from '../core/constants.js';
 
 class VideoEngine {
     constructor() {
@@ -46,13 +46,18 @@ class VideoEngine {
 
         const mb = await this.loadModules();
 
+        const fps = normalizeVideoFps(options.fps);
+
         this._config = {
             width: options.width || 1920,
             height: options.height || 1080,
             codec: options.codec || VIDEO_DEFAULTS.codec,
             bitrate: options.bitrate || VIDEO_DEFAULTS.bitrate,
             videoFormat: options.videoFormat || VIDEO_DEFAULTS.format,
-            ...options
+            ...options,
+            // 归一化后的帧率要盖掉 ...options 里的原始值：0 / 负数 / 2.5 / undefined
+            // 都不该进到编码参数里（钳制规则见 constants.normalizeVideoFps）
+            fps
         };
 
         // 根据格式创建输出格式
@@ -100,17 +105,25 @@ class VideoEngine {
         }
 
         this._videoSource = new mb.CanvasSource(canvas, canvasOpts);
-        this._output.addVideoTrack(this._videoSource);
+        // 帧率 ≠ 1 才把恒定帧率栅格交给 MediaBunny：它把每个样本吸附成 round(t×fps)/fps、
+        // 时长强制 1/fps，避免我们手写小数时间戳攒出来的累积漂移。
+        // fps === 1 时一个轨道选项都不加，走的还是升级前那条 add(timestamp, duration) 原路，
+        // 容器里的 timescale / frameRateIsConstant 写法也保持原样（默认观感不变）。
+        if (this._config.fps !== 1) {
+            this._output.addVideoTrack(this._videoSource, { frameRate: this._config.fps });
+        } else {
+            this._output.addVideoTrack(this._videoSource);
+        }
         await this._output.start();
 
         this._isInitialized = true;
-        console.log(`[VideoEngine] Initialized (${this._config.videoFormat})`);
+        console.log(`[VideoEngine] Initialized (${this._config.videoFormat}, ${this._config.fps} fps)`);
     }
 
     /**
      * 添加一帧到视频
-     * @param {number} timestamp - 时间戳（秒）
-     * @param {number} duration - 帧持续时间（秒）
+     * @param {number} timestamp - 时间戳（秒，帧率>1 时是小数，由调用方按 f/fps 给绝对值）
+     * @param {number} duration - 帧持续时间（秒，= 1/fps）
      */
     async addFrame(timestamp, duration) {
         if (!this._isInitialized) {
@@ -162,6 +175,10 @@ class VideoEngine {
     }
 
     get isInitialized() { return this._isInitialized; }
+    /** 本次编码用的帧率（1 = 1 秒 1 帧，升级前口径） */
+    get fps() { return this._config.fps || VIDEO_DEFAULTS.fps; }
+    /** 单帧持续秒数，调用方按 f × 这个值给时间戳 */
+    get frameDuration() { return 1 / this.fps; }
 }
 
 // 单例导出
