@@ -169,6 +169,7 @@ including the `settings` → auto-generated panel mapping, is
 | `LeaferManager.js` | Owns the two Leafer worlds: the interactive one the user edits, and an in-memory one used for export. Keeping them separate is what lets export run without freezing or repainting the editor. |
 | `frameRenderer.js` | Renders `totalSeconds × videoFps` frames: dense frame *f* becomes the second-space time `timeOfFrame(start, f, fps, end)` (decimal when `fps > 1`, clamped to `end` at the tail), then `updateAllComponents(t, /* memory */ true)`, paint the memory canvas, hand the bitmap to the encoder with `addFrame(f / fps, 1 / fps)`. **Duration is deliberately unchanged**: `frames / fps === seconds`, so choosing 4 fps buys smoothness, not a shorter film. |
 | `VideoEngine.js` | MediaBunny wrapper. Default `avc` @ 8 Mbps in MP4/MOV; the WebM path switches to `vp9` with `alpha: 'keep'` so the dashboard can be composited over footage. When `fps !== 1` the video track is created as `addVideoTrack(source, { frameRate: fps })`, letting MediaBunny snap every sample onto the constant-rate `1/fps` grid instead of trusting hand-written decimal timestamps; at `fps === 1` no track options are passed at all, so the container is written exactly as before. |
+| `core/constants.js` → `estimateRenderMemory()` | What the *Video Setup* dialog quotes as "Memory ≈ …". MediaBunny buffers the whole encoded clip in the tab and `finalize()` copies those bytes again into the Blob, so the peak is `2 × bitrate × seconds + 2 canvases (w×h×4×2)` against a `RENDER_MEMORY_BUDGET` of 1.5 GiB; past it the line turns amber (red past 2×) and adds "render in chunks of ≤ N s". Frame rate is deliberately not an input — `fps` multiplies frames and render time, not the encoded bytes. MP4/MOV use their real target bitrates (`MOV_BITRATE` is the one constant both the encoder and this estimate read); WebM is quality-driven, so it is estimated at the MP4 rate and labelled `approx`. |
 
 ### Two frame-number spaces
 
@@ -196,6 +197,17 @@ component can also be drawn *inside* the Leafer canvas for export. The AMap laye
 is optional and guarded — with no key configured the rest of the app is
 unaffected. Tile-provider attribution obligations are listed in
 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
+Before a render starts, `preloadMaps(startFrame, endFrame, fps, onProgress)` fast-forwards the
+range so the off-screen maps warm their tile cache (the visible "Preloading maps…" pass). It
+reports progress against **the frames this export will actually encode** (`seconds × fps`, the
+same number `frameRenderer.js` loops over) and hands back `{ percent, warmed, totalFrames }` —
+at 4 fps that pass used to hit 100 % after a quarter of the work. The positions it visits stay
+on the same second grid as before (`step = round(seconds / 100) × fps`, i.e. every
+`round(seconds / 100)`-th second), so the warm-up path, its ~100 steps and its ~5 s budget are
+byte-for-byte the pre-upgrade ones: warming sub-second positions buys nothing, because a tile
+covering a point 0.25 s down the track is already covered by the two whole seconds around it.
+Skipping entirely when no map component is on the canvas is unchanged.
 
 ## 7. UI (`js/ui/`)
 

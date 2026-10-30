@@ -7,7 +7,7 @@ import { store } from '../core/Store.js';
 import { generateVideo, abortRender } from '../renderer/frameRenderer.js';
 import { mapBridge } from '../map/MapBridge.js';
 import { secondsToHHMMSS } from '../utils/format.js';
-import { VIDEO_DEFAULTS, VIDEO_FPS_PRESETS, VIDEO_FPS_MAX, normalizeVideoFps } from '../core/constants.js';
+import { VIDEO_DEFAULTS, VIDEO_FORMATS, VIDEO_FPS_PRESETS, VIDEO_FPS_MAX, normalizeVideoFps, MOV_BITRATE, RENDER_MEMORY_BUDGET, estimateRenderMemory } from '../core/constants.js';
 
 /** 单次渲染的建议帧数上限：弹窗里那句「长视频分批」的口径（原来是按秒算，现在要按帧算） */
 const RENDER_CHUNK_HINT = 5000;
@@ -20,6 +20,35 @@ const FPS_HELP = 'Frames per second.\n'
     + 'trackpoints are linearly interpolated (10 -> 12 shows 10.25, 10.5, 10.75).\n'
     + 'The video length does NOT change: one second of data is still one second of video.\n'
     + 'What grows is the frame count and the render time (x N).';
+
+/**
+ * 内存那一行的悬停说明：钱花在哪、为什么帧率不影响它、超了怎么办。
+ * 口径全部来自 constants.estimateRenderMemory，文案与它保持同一套（别在 UI 里另算一遍）。
+ */
+const MEM_HELP = 'Rough upper bound on the memory this render needs.\n'
+    + 'The encoded video is buffered entirely in the tab (MediaBunny BufferTarget), and when\n'
+    + 'packing finishes the bytes are copied into a Blob, so the peak is about twice the file\n'
+    + 'size, plus two full-size canvases (1920x1080 RGBA ~ 8 MB each) used per frame.\n'
+    + 'File size grows with DURATION and FORMAT (MP4 8 Mbps ~ 1 MB/s, MOV ProRes 330 Mbps\n'
+    + '~ 41 MB/s, WebM is quality-driven so MP4\'s rate is assumed). Frame rate does not\n'
+    + 'change this estimate - it only multiplies render time.\n'
+    + `If it goes over ${fmtBytes(RENDER_MEMORY_BUDGET)}, split the clip into shorter Start/End ranges and render\n`
+    + 'them one by one; nothing is blocked here, this is only a warning.';
+
+/** 字节数成人话：≥1 GB 显两位小数，否则取整 MB（弹窗那一行放不下第三种精度） */
+function fmtBytes(bytes) {
+    const b = Math.max(0, Number(bytes) || 0);
+    const gb = 1024 ** 3;
+    if (b >= gb) return `${(b / gb).toFixed(2)} GB`;
+    return `${Math.max(1, Math.round(b / 1024 ** 2))} MB`;
+}
+
+/** 各格式的码率口径标签：和 estimateRenderMemory 用的是同一批常量，只是换成给用户看的说法 */
+function rateLabel(format) {
+    if (format === VIDEO_FORMATS.MOV) return `${Math.round(MOV_BITRATE / 1e6)} Mbps ProRes`;
+    if (format === VIDEO_FORMATS.WEBM) return 'VP9 ~8 Mbps assumed';
+    return `${Math.round(VIDEO_DEFAULTS.bitrate / 1e6)} Mbps`;
+}
 
 const CHECKER_BG = 'background-color: #fff; background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), '
     + 'linear-gradient(-45deg, #ccc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #ccc 75%), '
@@ -121,7 +150,7 @@ class VideoPanel {
 
         this._setupIndex = this._layer.open({
             type: 1,
-            area: ['440px', '500px'],
+            area: ['440px', '560px'],
             title: 'Video Setup',
             content: `
                 <div style="padding: 12px;">
@@ -173,6 +202,12 @@ class VideoPanel {
                     </div>
                     <div id="vFrameCount" style="margin-bottom: 8px; color: #888;"></div>
                     <div id="vRenderHint" style="margin-bottom: 8px; color: #e74c3c;"></div>
+                    <div style="margin-bottom: 10px; color: #888; line-height: 1.5;">
+                        <span id="vMemHelp" title="${MEM_HELP}"
+                            style="display: inline-block; width: 16px; height: 16px; line-height: 14px;
+                                   text-align: center; margin-right: 6px; border: 1px solid #bbb;
+                                   border-radius: 50%; color: #888; font-size: 12px; cursor: help;">?</span><span id="vMemText"></span>
+                    </div>
 
                     <button class="layui-btn layui-btn-normal" id="btnStartGenerate">Start Generate</button>
                 </div>
@@ -190,6 +225,9 @@ class VideoPanel {
                 endInput.addEventListener('change', onChange);
                 select.addEventListener('change', () => { syncFpsVisibility(); onChange(); });
                 if (custom) custom.addEventListener('change', onChange);
+                // 格式也驱动回显：内存预估按格式的码率算，切 WebM / MOV 得跟着重算
+                document.querySelectorAll('input[name="videoFormat"]')
+                    .forEach(r => r.addEventListener('change', onChange));
                 document.getElementById('btnStartGenerate')
                     .addEventListener('click', () => this._startGenerate());
                 syncFpsVisibility();
@@ -257,6 +295,22 @@ class VideoPanel {
                 : '';
         }
 
+        // 内存预估：公式在 constants.estimateRenderMemory 里（本文件不另算一遍），
+        // 只按「时长 × 格式码率」估，帧率不参与 —— 帧率改的是帧数和耗时，不是成片字节数。
+        const memEl = document.getElementById('vMemText');
+        if (memEl) {
+            const format = document.querySelector('input[name="videoFormat"]:checked')?.value || VIDEO_DEFAULTS.format;
+            const mem = estimateRenderMemory({ seconds, videoFormat: format, canvasSize: store.get('canvasSize') });
+            memEl.textContent = `Memory ≈ ${fmtBytes(mem.peakBytes)} peak `
+                + `(2 × ${fmtBytes(mem.fileBytes)} file + ${fmtBytes(mem.canvasBytes)} canvases; `
+                + `${rateLabel(format)} × ${seconds} s)`
+                + (mem.over
+                    ? ` — over the ${fmtBytes(mem.budgetBytes)} budget, render in chunks of ≤ ${mem.maxChunkSeconds} s`
+                    : '');
+            const row = memEl.parentElement;
+            if (row) row.style.color = mem.wayOver ? '#e74c3c' : mem.over ? '#e67e22' : '#888';
+        }
+
         store.set('startFrame', start, true);
         store.set('endFrame', end, true);
         store.set('videoFps', fps, true);
@@ -289,7 +343,7 @@ class VideoPanel {
                     codec: 'prores',
                     width: size.width,
                     height: size.height,
-                    bitrate: 330_000_000
+                    bitrate: MOV_BITRATE
                 });
                 if (!check.supported) throw new Error('unsupported');
             } catch (e) {
@@ -309,10 +363,10 @@ class VideoPanel {
         this._openPreview(renderFrames);
 
         try {
-            // 地图预载 pass（约 5 秒）：先快速播放一遍让离屏地图预热瓦片/完成首帧渲染，
-            // 防止用户未预览过地图导致导出前几帧背景滞后；无地图组件时自动跳过
-            const preloaded = await mapBridge.preloadMaps(startFrame, endFrame, (p) =>
-                this._setStatus(`Preloading maps... ${p}%`, false));
+            // 地图预载 pass（约 5 秒）：位置仍走整秒栅格（跟升级前一样，见 MapBridge.preloadMaps），
+            // 但进度按本次真实帧数报；无地图组件时自动跳过不增加等待
+            const preloaded = await mapBridge.preloadMaps(startFrame, endFrame, fps, ({ percent, warmed, totalFrames }) =>
+                this._setStatus(`Preloading maps... ${percent}% (${warmed}/${totalFrames} frames @ ${fps} fps)`, false));
             if (preloaded) this._setStatus('Maps preloaded, starting render', false);
 
             const blob = await generateVideo({

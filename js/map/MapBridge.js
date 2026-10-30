@@ -14,7 +14,8 @@
 
 import { eventBus, Events } from '../core/EventBus.js';
 import { store } from '../core/Store.js';
-import { samplePathPoint } from '../data/frameSampling.js';
+import { normalizeVideoFps } from '../core/constants.js';
+import { samplePathPoint, timeOfFrame } from '../data/frameSampling.js';
 
 // ============================================================
 // 瓦片图源配置（maptalks 侧，均为 WGS84 境外源，老款原样搬入）
@@ -277,35 +278,60 @@ class MapBridge {
     }
 
     /**
-     * 地图预载 pass（视频导出前调用）：把渲染范围快速播放一遍（约 5 秒，
-     * 50ms/步、每步 1% 进度），让离屏地图逐帧渲染并预热瓦片缓存，
-     * 避免导出前几帧地图背景滞后。无活动地图组件时直接跳过不增加等待。
-     * @param {number} startFrame - 渲染范围起帧
-     * @param {number} endFrame - 渲染范围止帧
-     * @param {Function} [onProgress] - (percent 0-100) => void
+     * 地图预载 pass（视频导出前调用）：把渲染范围快速播放一遍（约 5 秒预算，50ms/步），
+     * 让离屏地图逐帧渲染并预热瓦片缓存，避免导出前几帧地图背景滞后。
+     * 无活动地图组件时直接跳过不增加等待。
+     *
+     * 进度分母改成**本次真正要渲染的帧数**（秒数 × fps），不再按升级前的「一秒一帧」报 0-100%：
+     * N=4 时导出的活是 4 倍，预载那条状态还按秒数跑完 100%，看起来就像进度对不上。
+     *
+     * 但走到的**位置仍落在整秒栅格上**（步长 = 秒空间步长 × fps），故意不加密：
+     * 亚秒位置夹在相邻两个轨迹点之间（1 秒 ≈ 几米），它要的那块瓦片这两秒已经各要过一次了，
+     * 加密预热只是白跑几十步 —— 5 秒片段 × 30 fps 会从 6 步涨到 150 步（多等 7 秒），
+     * 而导出的实际耗时才 5 秒。所以这里只改「报什么」，不改「走哪、走几步、走多久」。
+     * N=1 时步长、位置序列、循环次数与升级前逐位相同（已 A/B 比过）。
+     *
+     * @param {number} startFrame - 渲染范围起帧（秒空间）
+     * @param {number} endFrame - 渲染范围止帧（秒空间，含）
+     * @param {number} [fps] - 本次导出的帧率（1…60），决定「真实总帧数」
+     * @param {Function} [onProgress] - ({ percent, warmed, totalFrames }) => void
      * @returns {Promise<boolean>} 是否实际执行了预载
      */
-    async preloadMaps(startFrame, endFrame, onProgress) {
+    async preloadMaps(startFrame, endFrame, fps, onProgress) {
         if (!this._components.size) return false;
         const trkptData = store.get('trkptData');
         if (!trkptData || !trkptData.length) return false;
 
         const from = Math.max(0, startFrame | 0);
         const to = Math.min(trkptData.length - 1, Number.isFinite(endFrame) ? endFrame | 0 : trkptData.length - 1);
+        const fpsN = normalizeVideoFps(fps);
+        const totalFrames = (to - from + 1) * fpsN;               // 与 frameRenderer 的帧数同一口径
         const savedFrame = store.get('currentFrame');
-        const STEP_MS = 50;                                   // 1 秒 20 帧
-        const step = Math.max(1, Math.round((to - from) / 100)); // 每帧约 1% 进度 → 100 步 ≈ 5s
+        const STEP_MS = 50;                                       // 1 秒 20 帧
+        // 秒空间步长与升级前逐字相同，只是乘上 fps 换成稠密帧号：走到的整秒位置、循环次数、
+        // 整趟耗时都不变，变的只是进度分母（见上方注释）
+        const step = Math.max(1, Math.round((to - from) / 100)) * fpsN;
 
-        for (let f = from; f <= to; f += step) {
-            store.set('currentFrame', f);
-            eventBus.emit(Events.FRAME_UPDATE, f);
-            if (onProgress) onProgress(Math.min(100, Math.round(((f - from) / Math.max(1, to - from)) * 100)));
+        const report = (warmed) => {
+            if (onProgress) onProgress({
+                percent: Math.min(100, Math.round((warmed / totalFrames) * 100)),
+                warmed: Math.min(warmed, totalFrames),
+                totalFrames
+            });
+        };
+
+        for (let f = 0; f < totalFrames; f += step) {
+            // f 一定是 step_sec × fps 的整数倍，所以 timeOfFrame 回来永远是整秒
+            const sec = timeOfFrame(from, f, fpsN, to);
+            store.set('currentFrame', sec);
+            eventBus.emit(Events.FRAME_UPDATE, sec);
+            report(f + step);                                     // 这一步覆盖了 step 帧
             await new Promise(r => setTimeout(r, STEP_MS));
         }
         // 补跑止帧后恢复预览位置
         store.set('currentFrame', to);
         eventBus.emit(Events.FRAME_UPDATE, to);
-        if (onProgress) onProgress(100);
+        report(totalFrames);
 
         const restore = Number.isFinite(savedFrame) ? savedFrame : from;
         store.set('currentFrame', restore);

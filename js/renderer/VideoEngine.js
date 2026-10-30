@@ -4,7 +4,7 @@
  */
 
 import { eventBus, Events } from '../core/EventBus.js';
-import { VIDEO_DEFAULTS, VIDEO_FORMATS, normalizeVideoFps } from '../core/constants.js';
+import { VIDEO_DEFAULTS, VIDEO_FORMATS, MOV_BITRATE, normalizeVideoFps } from '../core/constants.js';
 
 class VideoEngine {
     constructor() {
@@ -70,7 +70,8 @@ class VideoEngine {
         } else if (this._config.videoFormat === VIDEO_FORMATS.MOV) {
             outputFormat = new mb.MovOutputFormat({
                 codec: 'prores',
-                bitrate: 330_000_000
+                // 与内存预估同一个数（constants.MOV_BITRATE），别两处各写一遍
+                bitrate: MOV_BITRATE
             });
         } else {
             outputFormat = new mb.Mp4OutputFormat({
@@ -97,7 +98,7 @@ class VideoEngine {
             canvasOpts.alpha = 'keep';
         } else if (this._config.videoFormat === VIDEO_FORMATS.MOV) {
             canvasOpts.codec = 'prores';
-            canvasOpts.bitrate = 330_000_000;
+            canvasOpts.bitrate = MOV_BITRATE;
             canvasOpts.alpha = 'keep';
         } else {
             canvasOpts.codec = this._config.codec;
