@@ -240,7 +240,7 @@ response shapes are visible in the browser's Network tab when the panel runs.
 | Technology | Version | Used for | Shipped here? |
 |---|---|---|---|
 | Leafer Editor / leafer-ui | 2.2.11 (editor pages) · 2.3.0 (Studio vendor) | canvas interaction and the object graph | CDN + vendored |
-| MediaBunny | bundled build | WebCodecs video encoding | yes |
+| MediaBunny | 1.65.0 (vendored single-file ESM) | WebCodecs video encoding | yes |
 | layui | 2.11.5 | buttons, nav, colour picker, dialogs | yes |
 | maptalks | 1.0.3 | map layers | yes |
 | jQuery | 3.6.0 | legacy helpers layui still expects | yes |

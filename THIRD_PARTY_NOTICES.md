@@ -25,7 +25,7 @@ Copies shipped inside this repository.
 |---|---|---|---|---|
 | Leafer Editor (incl. `leafer-ui` + editor plugin) | 2.3.0 | MIT | `studio/js/vendor/leafer-editor.web.min.js` | <https://github.com/leaferjs/Leafer-Editor> |
 | Leafer Editor | 2.2.11 | MIT | loaded from unpkg in `index.html` / `designer.html` (see §2) | same |
-| MediaBunny | (bundled build) | MPL-2.0 | `js/mediabunny.min.js`, `js/mediabunny.min.mjs` | <https://github.com/Vanilagy/mediabunny> |
+| MediaBunny | 1.65.0 (was 1.57.0 until 2026-10-31) | MPL-2.0 | `js/mediabunny.min.js`, `js/mediabunny.min.mjs` | <https://github.com/Vanilagy/mediabunny> |
 | layui | 2.11.5 | MIT | `lib/layui.js`, `css/layui.css`, `studio/css/layui.css` | <https://github.com/layui/layui> |
 | maptalks | 1.0.3 | BSD-3-Clause | `lib/maptalks.min.js`, `css/maptalks.css` | <https://github.com/maptalks/maptalks.js> |
 | jQuery | 3.6.0 | MIT | `lib/jquery-3.6.0.min.js` (kept for layui's older module API) | <https://github.com/jquery/jquery> |
@@ -36,6 +36,13 @@ Notes:
   open- or closed-source projects, but if you *modify* `mediabunny.min.*` itself
   and distribute it, the modified file must stay under MPL-2.0. The copyright and
   licence header is retained at the top of both bundles — do not strip it.
+- **Upgrading MediaBunny**: the two files are byte-identical copies of upstream's
+  single-file ESM bundle `dist/bundles/mediabunny.min.mjs` from the npm package
+  (`unpkg.com/mediabunny@<ver>/dist/bundles/mediabunny.min.mjs` is reachable from
+  this network when jsdelivr and the raw tarball are not). Replace both, then
+  re-check the seven names `VideoEngine.loadModules()` destructures, the
+  `CanvasSource.add(timestamp, duration)` signature, and
+  `addVideoTrack(source, { frameRate })` — those are the whole contract we use.
 - **Leafer version drift.** `studio/index.html` loads a local 2.3.0 build and only
   falls back to the unpkg 2.2.11 CDN when `window.LeaferUI` is missing, while the
   editor pages load 2.2.11 from unpkg and nothing else. Both work today, but a
