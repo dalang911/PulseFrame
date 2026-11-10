@@ -563,6 +563,9 @@ html, body {
     width: 100%;
     height: auto;
     aspect-ratio: 1;
+    /* aspect-ratio 盒子的 min-height:auto 取内容最小尺寸，会被 Leafer 画布撑成正方形以外的高度 */
+    min-height: 0;
+    overflow: hidden;
     margin: 10px auto;
 }
 

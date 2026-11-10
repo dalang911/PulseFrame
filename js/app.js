@@ -6,7 +6,7 @@
 import { eventBus, Events } from './core/EventBus.js';
 import { store } from './core/Store.js';
 import { canvasManager } from './core/CanvasManager.js';
-import { DEFAULT_CANVAS, PREVIEW_SIZE } from './core/constants.js';
+import { DEFAULT_CANVAS, PREVIEW_SIZE, CANVAS_PRESETS } from './core/constants.js';
 import { dataPipeline } from './data/DataPipeline.js';
 import { localComponents, sharedComponents } from './ui/CustomComponentPanels.js';
 import { widgetPicker } from './ui/WidgetPicker.js';
@@ -15,6 +15,7 @@ import { initBackgroundLayer } from './components/factory.js';
 import { updateAllComponents } from './components/updater.js';
 import { videoPanel } from './ui/VideoPanel.js';
 import { applyRatio } from './ui/CanvasResizer.js';
+import { openCanvasResolutionDialog } from './ui/CanvasResolutionDialog.js';
 import { initAlignTools } from './ui/AlignTools.js';
 import { initTemplateLibrary } from './ui/TemplateLibrary.js';
 import { initGlobalFont } from './core/GlobalFont.js';
@@ -130,6 +131,10 @@ function initLeaferInstances() {
     // 存入 CanvasManager（不再存入 Store，避免不可序列化对象污染状态层）
     canvasManager.initPreview(appview, frame);
     canvasManager.initMemory(memoryApp, memoryFrame);
+
+    // 预览视口跟随 #appv 实际尺寸（初始化写死的 960 在窄窗口下会撑出容器），并监听后续变化
+    canvasManager.fitPreview();
+    canvasManager.observePreviewResize();
 
     // 6. 背景层：自动添加为画布最底层（仅预览参考，视频导出时过滤，同老款程序）
     initBackgroundLayer();
@@ -327,34 +332,56 @@ function initTabSwitch() {
 }
 
 /**
- * 初始化横竖屏（画布比例）切换按钮
+ * 初始化画布比例 / 自定义分辨率按钮组（三态高亮）
  */
 function initRatioSwitch() {
     const btn169 = document.getElementById('ratio169');
     const btn916 = document.getElementById('ratio916');
+    const btnCustom = document.getElementById('ratioCustom');
     if (!btn169 || !btn916) return;
 
-    const setActive = (ratio) => {
-        btn169.classList.toggle('layui-btn-normal', ratio === '16:9');
-        btn169.classList.toggle('layui-btn-primary', ratio !== '16:9');
-        btn916.classList.toggle('layui-btn-normal', ratio === '9:16');
-        btn916.classList.toggle('layui-btn-primary', ratio !== '9:16');
+    const buttons = [['16:9', btn169], ['9:16', btn916], ['custom', btnCustom]];
+
+    // 尺寸不命中任何预设时高亮落在 Custom 上（模板载入也走这里）
+    const sync = () => {
+        const size = store.get('canvasSize') || DEFAULT_CANVAS;
+        const preset = Object.keys(CANVAS_PRESETS).find(k =>
+            CANVAS_PRESETS[k].width === size.width && CANVAS_PRESETS[k].height === size.height);
+        buttons.forEach(([key, el]) => {
+            if (!el) return;
+            const on = key === (preset || 'custom');
+            el.classList.toggle('layui-btn-normal', on);
+            el.classList.toggle('layui-btn-primary', !on);
+        });
+        if (btnCustom) btnCustom.title = `Custom resolution (current ${size.width}×${size.height})`;
     };
 
     btn169.addEventListener('click', () => {
-        if (applyRatio('16:9')) { setActive('16:9'); notifyRatioSwitch(); }
+        if (applyRatio('16:9')) notifyCanvasReset(CANVAS_PRESETS['16:9']);
+        sync();
     });
     btn916.addEventListener('click', () => {
-        if (applyRatio('9:16')) { setActive('9:16'); notifyRatioSwitch(); }
+        if (applyRatio('9:16')) notifyCanvasReset(CANVAS_PRESETS['9:16']);
+        sync();
     });
+    if (btnCustom) {
+        btnCustom.addEventListener('click', () => {
+            openCanvasResolutionDialog((size) => { sync(); notifyCanvasReset(size); });
+        });
+    }
+
+    eventBus.on(Events.CANVAS_RESIZE, sync);
+    sync();
 }
 
 /**
- * 切换比例后的轻提示（画布已重置，组件被清空）
+ * 改画布尺寸后的轻提示（画布已重置，组件被清空）
+ * @param {{width:number, height:number}} size
  */
-function notifyRatioSwitch() {
+function notifyCanvasReset(size) {
     if (!window.layui) return;
-    const show = () => layui.layer.msg('Canvas ratio changed; components cleared, please re-add them', { icon: 1, time: 1800 });
+    const text = `Canvas set to ${size.width}×${size.height}; components cleared, please re-add them`;
+    const show = () => layui.layer.msg(text, { icon: 1, time: 1800 });
     if (layui.layer && layui.layer.msg) show();
     else if (typeof layui.use === 'function') layui.use(['layer'], show);
 }

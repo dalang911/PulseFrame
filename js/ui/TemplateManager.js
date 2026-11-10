@@ -8,7 +8,9 @@ import { canvasManager } from '../core/CanvasManager.js';
 import { eventBus, Events } from '../core/EventBus.js';
 import { apiBase } from '../core/appConfig.js';
 import { registry } from '../components/registry.js';
-import { addComponentToCanvas, clearAllComponents, resizeBackground } from '../components/factory.js';
+import { addComponentToCanvas } from '../components/factory.js';
+import { applyCanvasSize } from './CanvasResizer.js';
+import { normalizeCanvasSize } from '../core/constants.js';
 import { extractConfigDiff, mergeSavedConfig } from '../utils/configDiff.js';
 import { canvasToCoverDataUrl } from '../utils/images.js';
 
@@ -66,20 +68,11 @@ class TemplateManager {
         const frame = canvasManager.frame;
         if (!frame) return;
 
-        // 应用模板记录的画布尺寸（横/竖屏），保证组件坐标落在正确比例下
-        const size = templateJson.canvasSize || { width: 1920, height: 1080 };
-        store.set('canvasSize', { width: size.width, height: size.height });
-        canvasManager.setCanvasSize(size.width, size.height);
-        ['canv', 'videoCanvas'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) { el.width = size.width; el.height = size.height; }
-        });
-
-        // 全量重置：清空用户组件 + activeComponents + 内存实例组件（保留背景层），
-        // 否则 addComponentToCanvas 的单例校验会拦截同名组件 → 重复载入时不生效。
-        clearAllComponents();
-        // 背景铺满新画布尺寸（保留用户当前背景色/图）
-        resizeBackground(size.width, size.height);
+        // 应用模板记录的画布尺寸：与横竖屏切换共用一条链路（改双实例 + Store + 导出 canvas、
+        // 清空组件、铺背景、广播 CANVAS_RESIZE 让按钮高亮同步），下面再逐个恢复组件。
+        // 不走 normalizeCanvasSize 的话，畸形尺寸会让 applyCanvasSize 提前 return，
+        // 组件没被清空 → addComponentToCanvas 的单例校验拦截同名组件，重复载入不生效。
+        applyCanvasSize(normalizeCanvasSize(templateJson.canvasSize));
 
         // 逐个恢复组件（跳过背景/Setup；同步顺序执行保证层叠一致）
         templateJson.components.forEach(comp => {

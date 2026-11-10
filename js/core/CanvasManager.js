@@ -22,6 +22,8 @@ class CanvasManager {
         this._memoryApp = null;
         /** @type {object|null} 内存渲染 Frame */
         this._memoryFrame = null;
+        /** @type {ResizeObserver|null} 预览容器尺寸监听 */
+        this._resizeObserver = null;
     }
 
     // ===== 前端预览实例 =====
@@ -131,18 +133,60 @@ class CanvasManager {
             if (typeof this._memoryFrame.update === 'function') this._memoryFrame.update();
         }
 
-        // 重新把画布缩放到预览视口（同 app.js 初始化时的 zoom 适配）
-        if (this._appview && this._appview.tree && typeof this._appview.tree.zoom === 'function') {
-            this._appview.tree.zoom({ x: 0, y: 0, width, height }, [0, 0, 0, 0]);
-        }
+        // 重新把画布缩放到预览视口（同步视口尺寸 + 适配，见 fitPreview）
+        this.fitPreview();
 
         console.log(`[CanvasManager] Canvas size → ${width}x${height}`);
+    }
+
+    /**
+     * 让前端预览视口跟随 #appv 容器的实际尺寸，并把画布缩放适配进去。
+     *
+     * 视口在初始化时写死 PREVIEW_SIZE×PREVIEW_SIZE，容器被窗口/侧栏挤窄时若不同步，
+     * 画布元素就会撑出容器产生滚动条。取宽高的较小值保证始终是正方形（与 CSS aspect-ratio 一致）。
+     *
+     * 只动前端预览：**内存渲染实例不能跟着 zoom** —— 导出走 memoryFrame.export('canvas')
+     * 按 frame 自身尺寸出图，缩过之后会导出小图再被拉伸回目标分辨率。
+     */
+    fitPreview() {
+        const app = this._appview;
+        if (!app) return;
+
+        const host = document.getElementById('appv');
+        if (host) {
+            const size = Math.max(1, Math.min(host.clientWidth, host.clientHeight));
+            if (app.width !== size || app.height !== size) {
+                app.width = size;
+                app.height = size;
+            }
+        }
+
+        const frame = this._frame;
+        if (frame && frame.width && frame.height && app.tree && typeof app.tree.zoom === 'function') {
+            app.tree.zoom({ x: 0, y: 0, width: frame.width, height: frame.height }, [0, 0, 0, 0]);
+        }
+    }
+
+    /**
+     * 监听预览容器尺寸变化（窗口缩放、侧栏挤压）→ 自动重新适配。
+     * fitPreview 里的写入带「尺寸相同就不动」守卫，zoom 又不改变容器盒子，所以不会自激循环。
+     */
+    observePreviewResize() {
+        if (this._resizeObserver || typeof ResizeObserver !== 'function') return;
+        const host = document.getElementById('appv');
+        if (!host) return;
+        this._resizeObserver = new ResizeObserver(() => this.fitPreview());
+        this._resizeObserver.observe(host);
     }
 
     /**
      * 销毁所有实例（页面卸载或重建画布时调用）
      */
     destroy() {
+        if (this._resizeObserver) {
+            this._resizeObserver.disconnect();
+            this._resizeObserver = null;
+        }
         if (this._appview && typeof this._appview.destroy === 'function') {
             this._appview.destroy();
         }

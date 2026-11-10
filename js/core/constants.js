@@ -14,6 +14,80 @@ export const DEFAULT_CANVAS = CANVAS_PRESETS['16:9'];
 // 预览区域尺寸
 export const PREVIEW_SIZE = 960;
 
+// 自定义分辨率每边的上下限。下限拦的是 0 / 负数这类退化值，上限是浏览器编码器的量级。
+export const CANVAS_SIZE_MIN = 160;
+export const CANVAS_SIZE_MAX = 4096;
+
+// 总像素上限 = 36864 个宏块，即 H.264 level 5.1 的最大帧尺寸（4096×2304）。
+// 4K 3840×2160 在内，正方形 4096×4096 超了要等比缩下来，否则编码器直接拒绝配置。
+export const CANVAS_MAX_PIXELS = 4096 * 2304;
+
+// 自定义分辨率弹窗里的快捷档（头两项就是 Ratio 按钮那两个预设）
+export const CANVAS_RESOLUTION_PRESETS = [
+    { width: 1920, height: 1080, label: '1080p' },
+    { width: 1080, height: 1920, label: '1080p portrait' },
+    { width: 1280, height: 720, label: '720p' },
+    { width: 3840, height: 2160, label: '4K UHD' },
+    { width: 1080, height: 1080, label: 'Square' },
+    { width: 1440, height: 1080, label: '4:3' },
+    { width: 2560, height: 1080, label: '21:9' }
+];
+
+/** 夹到 [MIN, MAX] 并向下取偶；非数字/非正数回落到 fallback */
+function clampCanvasSide(value, fallback) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n <= 0) return fallback;
+    const clamped = Math.min(CANVAS_SIZE_MAX, Math.max(CANVAS_SIZE_MIN, Math.round(n)));
+    return Math.floor(clamped / 2) * 2;
+}
+
+/**
+ * 归一化画布分辨率（纯函数，弹窗与断言都只读这一处）。
+ *
+ * 三条规则，缺一不可：
+ *   1. 每边夹到 [CANVAS_SIZE_MIN, CANVAS_SIZE_MAX]；
+ *   2. **取偶数** —— H.264 / VP9 的色度是 4:2:0，奇数宽高会让编码器配置不被支持；
+ *   3. 总像素超过 CANVAS_MAX_PIXELS 时等比缩小（保持用户选的长宽比）。
+ * 非法输入回落到默认 1920×1080。UI 把结果写回输入框，用户看得见最终值。
+ * @param {{width:*, height:*}} [value]
+ * @returns {{width:number, height:number}}
+ */
+export function normalizeCanvasSize(value) {
+    const src = value || {};
+    let width = clampCanvasSide(src.width, DEFAULT_CANVAS.width);
+    let height = clampCanvasSide(src.height, DEFAULT_CANVAS.height);
+
+    const pixels = width * height;
+    if (pixels > CANVAS_MAX_PIXELS) {
+        const k = Math.sqrt(CANVAS_MAX_PIXELS / pixels);
+        width = Math.max(CANVAS_SIZE_MIN, Math.floor((width * k) / 2) * 2);
+        height = Math.max(CANVAS_SIZE_MIN, Math.floor((height * k) / 2) * 2);
+    }
+    return { width, height };
+}
+
+function gcd(a, b) {
+    return b === 0 ? a : gcd(b, a % b);
+}
+
+/**
+ * 长宽比的展示文案：能约成小整数就写 `16:9`，否则退化成 `1.78:1`
+ * （1920×1082 这种自定义值约出来是 960:541，摆在界面上没有可读性）。
+ * @param {number} width
+ * @param {number} height
+ * @returns {string}
+ */
+export function canvasAspectLabel(width, height) {
+    const w = Math.round(Number(width));
+    const h = Math.round(Number(height));
+    if (!(w > 0) || !(h > 0)) return '';
+    const g = gcd(w, h);
+    const rw = w / g;
+    const rh = h / g;
+    if (rw <= 64 && rh <= 64) return `${rw}:${rh}`;
+    return `${(w / h).toFixed(2)}:1`;
+}
+
 // 视频格式
 export const VIDEO_FORMATS = {
     MP4: 'mp4',
