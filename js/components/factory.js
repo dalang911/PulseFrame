@@ -5,6 +5,7 @@
 
 import { registry } from './registry.js';
 import { updateComponent } from './updater.js';
+import { relativeInsert } from './insertPlacement.js';
 import { store } from '../core/Store.js';
 import { canvasManager } from '../core/CanvasManager.js';
 import { eventBus, Events } from '../core/EventBus.js';
@@ -86,6 +87,26 @@ export function createComponent(componentId, configOverrides = {}) {
     if (isDerived && configOverrides.width == null) config.width = baseW;
     if (isDerived && configOverrides.height == null) config.height = baseH;
 
+    // 默认落点相对化（画布分辨率可自定义后，1920×1080 设计稿坐标不再可靠）：
+    // 只在调用方没给 x/y 时做，即面板点选这类「新增」；模板载入 / 移除后恢复 /
+    // 属性面板改坐标都带显式 x/y，那些位置已经是在当前画布上定好的，不能再搬一次。
+    let insertW = targetW;
+    let insertH = targetH;
+    if (!isBg && configOverrides.x == null && configOverrides.y == null) {
+        const moved = relativeInsert(
+            { x: config.x || 0, y: config.y || 0, width: targetW, height: targetH, rotation: config.rotation || 0 },
+            store.get('canvasSize')
+        );
+        if (moved) {
+            config.x = moved.x;
+            config.y = moved.y;
+            config.width = moved.width;
+            config.height = moved.height;
+            insertW = moved.width;
+            insertH = moved.height;
+        }
+    }
+
     // 调用 build 函数获取 children（背景按目标尺寸，其它按默认几何）
     const children = definition.build({ ...config, width: baseW, height: baseH }, store.get('processedData'));
 
@@ -112,10 +133,10 @@ export function createComponent(componentId, configOverrides = {}) {
     // 非背景组件：目标尺寸≠基准时 resize 到目标，等比缩放子元素
     // （resizeWidth/resizeHeight 缺失时退化为直接赋值 width/height，resizeChildren 仍会自动缩放）
     if (!isBg) {
-        if (typeof box.resizeWidth === 'function') box.resizeWidth(targetW);
-        else box.width = targetW;
-        if (typeof box.resizeHeight === 'function') box.resizeHeight(targetH);
-        else box.height = targetH;
+        if (typeof box.resizeWidth === 'function') box.resizeWidth(insertW);
+        else box.width = insertW;
+        if (typeof box.resizeHeight === 'function') box.resizeHeight(insertH);
+        else box.height = insertH;
     }
 
     // 保存合并后的配置，供右侧编辑面板读取/修改（同老款程序 json.set 机制）
