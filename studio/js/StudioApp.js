@@ -27,6 +27,11 @@ import { apiBase } from './lib/appConfig.js';
 import { DEMO_RQ } from './demoData.js';
 // 公共库弹窗：与主编辑器 Shared 面板共用同一份实现（仓库根 js/ui/ 下），两边观感一致
 import { openSharedLibrary } from '../../js/ui/SharedLibraryModal.js';
+// 双语：与主编辑器共用同一 i18n 核心（同一 URL → 同一单例、同一 pulseframe_lang 键），
+// Studio 自己的词条经 registerDictionary 注入；必须在任何 t()/渲染之前注册
+import { t, initI18n, registerDictionary } from '../../js/core/i18n.js';
+import { STUDIO_ZH_DICT, STUDIO_ZH_PATTERNS } from './i18n.zh.js';
+registerDictionary(STUDIO_ZH_DICT, STUDIO_ZH_PATTERNS);
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -75,6 +80,9 @@ class StudioApp {
         // 如果从主编辑器带了编辑参数打开（?editFrom=local&editId=xxx 或 ?editFrom=shared&editId=xxx）
         // → 自动载入对应仪表盘数据，直接进入编辑态。
         this._maybeAutoLoadFromUrl();
+
+        // 双语收尾：绑定 EN/中 切换；zh 模式翻译已渲染的静态 DOM 并监听增量（en 零开销）
+        initI18n();
     }
 
     /**
@@ -94,12 +102,12 @@ class StudioApp {
             const spec = readLocalSpec(id);
             if (spec && spec.layers) {
                 specStore.loadSpec(spec);
-                this._toast('Editing local: ' + ((spec.meta && spec.meta.name) || id));
+                this._toast(t('Editing local: {name}', { name: (spec.meta && spec.meta.name) || id }));
             } else {
-                this._toast('Local component not found: ' + id);
+                this._toast(t('Local component not found: {id}', { id }));
             }
         } else if (from === 'shared') {
-            this._toast('Loading shared #' + id);
+            this._toast(t('Loading shared #{id}', { id }));
             await this._importSharedRow(id);
         }
     }
@@ -113,19 +121,19 @@ class StudioApp {
         try {
             const res = await fetch(`${apiBase()}?action=detail&id=${encodeURIComponent(dbId)}`);
             const ct = res.headers.get('content-type') || '';
-            if (!ct.includes('application/json')) { alert('Backend unavailable'); return null; }
+            if (!ct.includes('application/json')) { alert(t('Backend unavailable')); return null; }
             const d = await res.json();
             const content = d && d.data && d.data.json_content;
-            if (!content) { alert('No content for shared component #' + dbId); return null; }
+            if (!content) { alert(t('No content for shared component #{id}', { id: dbId })); return null; }
             specStore.importString(content);
             // 重命名 id：将当前 spec.meta.id 加上 _shared<dbId> 后缀，保证与同名本地项不冲突。
             const cur = (specStore.getSpec().meta && specStore.getSpec().meta.id) || ('shared_' + dbId);
             const forked = /_shared\d+$/.test(cur) ? cur : cur + '_shared' + dbId;
             if (forked && forked !== cur) specStore.setMeta({ id: forked }, false);
             const row = d.data || {};
-            this._toast('Editing copy of "' + (row.title || cur) + '" (#' + dbId + ' → ' + forked + ')');
+            this._toast(t('Editing copy of "{title}" (#{dbId} → {forked})', { title: row.title || cur, dbId, forked }));
             return { row, content };
-        } catch (e) { alert('Load failed: ' + e.message); return null; }
+        } catch (e) { alert(t('Load failed: {msg}', { msg: e.message })); return null; }
     }
 
     // 若页面尚未注入真实轨迹数据，用内置体育场演示数据填充（不覆盖已有外部数据）
@@ -173,7 +181,8 @@ class StudioApp {
         const hit = findIdConflict(id, self);
         if (!hit) return id;
         const fixed = suggestUniqueId(id, self);
-        this._toast(`ID "${id}" ${hit.reason === 'builtin' ? 'is a built-in id' : hit.reason === 'local' ? 'belongs to a saved local component' : 'is already registered'} → renamed to "${fixed}"`);
+        const reason = hit.reason === 'builtin' ? 'is a built-in id' : hit.reason === 'local' ? 'belongs to a saved local component' : 'is already registered';
+        this._toast(t('ID "{id}" {reason} → renamed to "{fixed}"', { id, reason: t(reason), fixed }));
         return fixed;
     }
 
@@ -211,16 +220,16 @@ class StudioApp {
     }
 
     // ===== 复制/粘贴/批量删除 =====
-    _copy() { const n = specStore.copySelection(); this._toast(n ? 'Copied ' + n + ' layers' : 'No layers selected'); }
+    _copy() { const n = specStore.copySelection(); this._toast(n ? t('Copied {n} layers', { n }) : 'No layers selected'); }
     _paste() {
         const uids = specStore.paste();
-        if (uids.length) this._toast('Pasted ' + uids.length);
+        if (uids.length) this._toast(t('Pasted {n}', { n: uids.length }));
         else this._toast('Clipboard is empty');
     }
-    _deleteSel() { const n = specStore.deleteSelection(); if (n) this._toast('Deleted ' + n); }
+    _deleteSel() { const n = specStore.deleteSelection(); if (n) this._toast(t('Deleted {n}', { n })); }
 
     _newComponent() {
-        if (!confirm('Creating a new component will clear current unsaved edits. Continue?')) return;
+        if (!confirm(t('Creating a new component will clear current unsaved edits. Continue?'))) return;
         specStore.newComponent();
         this._toast('Created new');
     }
@@ -229,7 +238,7 @@ class StudioApp {
     _resetCanvas() {
         const spec = specStore.getSpec();
         if (!(spec.layers || []).length) { this._toast('Canvas is already empty'); return; }
-        if (!confirm('Reset will clear all layers on the canvas (keeping component name/category/size). Continue?')) return;
+        if (!confirm(t('Reset will clear all layers on the canvas (keeping component name/category/size). Continue?'))) return;
         const blank = JSON.parse(JSON.stringify(spec));
         blank.layers = [];
         specStore.loadSpec(blank);
@@ -238,14 +247,14 @@ class StudioApp {
 
     _saveLocal() {
         const spec = specStore.getSpec();
-        if (!spec.meta.name || !spec.meta.name.trim()) { alert('Please enter a component name first'); return; }
+        if (!spec.meta.name || !spec.meta.name.trim()) { alert(t('Please enter a component name first')); return; }
         // 本地键就是 studio_comp_{meta.id}，id 撞车会直接覆掉另一份组件，先改名再写
         const origId = spec.meta.id;
         const safe = this._guardId(origId);
         if (safe !== origId) specStore.setMeta({ id: safe }, false);
         const id = specStore.saveLocal();
         registerVisualComponent(JSON.parse(JSON.stringify(specStore.getSpec()))); // 立即生效于本会话 registry
-        this._toast('Saved to local: ' + id + (safe === origId ? '' : ` (renamed, "${origId}" was taken)`));
+        this._toast(t('Saved to local: {id}', { id }) + (safe === origId ? '' : t(' (renamed, "{origId}" was taken)', { origId })));
     }
 
     _exportJson() {
@@ -265,7 +274,7 @@ class StudioApp {
         const reader = new FileReader();
         reader.onload = () => {
             try { specStore.importString(reader.result); this._toast('Import successful'); }
-            catch (e) { alert('Import failed: ' + e.message); }
+            catch (e) { alert(t('Import failed: {msg}', { msg: e.message })); }
             fileInput.value = '';
         };
         reader.readAsText(f);
@@ -296,8 +305,8 @@ class StudioApp {
             msg.hidden = false;
             msg.className = 'sp-json-msg ' + kind;
             const body = lines && lines.length
-                ? `<ul class="sp-json-list">${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : '';
-            msg.innerHTML = `<strong>${esc(title)}</strong>${body}`;
+                ? `<ul class="sp-json-list">${lines.map(l => `<li>${esc(t(l))}</li>`).join('')}</ul>` : '';
+            msg.innerHTML = `<strong>${esc(t(title))}</strong>${body}`;
         };
         const clearMsg = () => { msg.hidden = true; msg.innerHTML = ''; msg.className = 'sp-json-msg'; };
         const doValidate = () => {
@@ -310,7 +319,7 @@ class StudioApp {
             if (errors.length) { showMsg('err', `Validation failed (${errors.length} issue${errors.length > 1 ? 's' : ''}), not imported:`, errors); return; }
             try { specStore.importString(text); }   // re-parse + hard guard (meta & layers) then loadSpec
             catch (e) { showMsg('err', 'Import failed: ' + e.message, []); return; }
-            this._toast('Imported: ' + (parsed.meta.name || parsed.meta.id || 'component'));
+            this._toast(t('Imported: {name}', { name: parsed.meta.name || parsed.meta.id || 'component' }));
             if (warnings.length) showMsg('warn', `Imported with ${warnings.length} note(s):`, warnings);
             else close();
         };
@@ -332,21 +341,21 @@ class StudioApp {
         // 不需要手工拼接刷新。
         const provider = () => SpecStoreList().map(x => ({
             label: x.name || x.id,
-            sub: `${x.layerCount} layers · ${x.id}`,
+            sub: t('{n} layers · {id}', { n: x.layerCount, id: x.id }),
             onPick: () => {
                 const spec = readLocalSpec(x.id);
-                if (spec) { specStore.loadSpec(spec); this._toast('Opened: ' + (spec.meta.name || x.id)); }
-                else alert('Read failed');
+                if (spec) { specStore.loadSpec(spec); this._toast(t('Opened: {name}', { name: spec.meta.name || x.id })); }
+                else alert(t('Read failed'));
             },
             onDelete: () => {
                 const shown = x.name || x.id;
-                if (!confirm('Delete local component "' + shown + '"?\nThis removes it from localStorage and cannot be undone.')) return false;
+                if (!confirm(t('Delete local component "{name}"?\nThis removes it from localStorage and cannot be undone.', { name: shown }))) return false;
                 try { localStorage.removeItem(LOCAL_PREFIX + x.id); } catch (e) { /* ignore */ }
-                this._toast('Deleted: ' + shown);
+                this._toast(t('Deleted: {name}', { name: shown }));
                 return true;
             }
         }));
-        if (!provider().length) { alert('No locally saved components'); return; }
+        if (!provider().length) { alert(t('No locally saved components')); return; }
         this._pickDialog('Open local component', provider);
     }
 
@@ -357,12 +366,12 @@ class StudioApp {
         try {
             const res = await fetch(`${apiBase()}?action=list&kind=component&limit=200`);
             const ct = res.headers.get('content-type') || '';
-            if (!ct.includes('application/json')) { alert('Backend unavailable'); return; }
+            if (!ct.includes('application/json')) { alert(t('Backend unavailable')); return; }
             const result = await res.json();
             rows = (result.success && result.data) ? result.data : [];
-        } catch (e) { alert('Load failed: ' + e.message); return; }
+        } catch (e) { alert(t('Load failed: {msg}', { msg: e.message })); return; }
 
-        if (!rows.length) { alert('No published components in the public library'); return; }
+        if (!rows.length) { alert(t('No published components in the public library')); return; }
         this._libraryDialog(rows);
     }
 
@@ -465,12 +474,12 @@ class StudioApp {
     }
 
     _toast(msg) {
-        let t = $('#spToast');
-        if (!t) { t = document.createElement('div'); t.id = 'spToast'; t.className = 'sp-toast'; document.body.appendChild(t); }
-        t.textContent = msg;
-        t.classList.add('show');
+        let el = $('#spToast');
+        if (!el) { el = document.createElement('div'); el.id = 'spToast'; el.className = 'sp-toast'; document.body.appendChild(el); }
+        el.textContent = t(msg);
+        el.classList.add('show');
         clearTimeout(this._toastTimer);
-        this._toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+        this._toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
     }
 }
 

@@ -12,6 +12,7 @@ import { specStore } from './SpecStore.js';
 import { makeLayer } from './runtime/spec.js';
 import { fieldDemo } from './FieldDemo.js';
 import { loadFrontendDefs, importDef } from './FrontendGauges.js';
+import { t } from '../../js/core/i18n.js';
 
 const BASIC = [
     { type: 'rect', label: 'Rect' },
@@ -152,9 +153,10 @@ class ElementPalette {
                     const def = this._fe.defs.find(d => d.id === btn.dataset.fegauges);
                     try {
                         const r = importDef(def);
-                        status.textContent = `Imported "${def.name || def.id}" ${r.count} layers` + (r.skipped.length ? `, skipped ${r.skipped.length} unsupported element(s) (${r.skipped.join(', ')})` : '');
+                        status.textContent = t('Imported "{name}" {count} layers', { name: def.name || def.id, count: r.count })
+                            + (r.skipped.length ? t(', skipped {n} unsupported element(s) ({list})', { n: r.skipped.length, list: r.skipped.join(', ') }) : '');
                     } catch (e) {
-                        status.textContent = `Import failed: ${e.message}`;
+                        status.textContent = t('Import failed: {msg}', { msg: e.message });
                     }
                 });
             });
@@ -162,11 +164,11 @@ class ElementPalette {
         catSel.addEventListener('change', renderList);
         loadFrontendDefs().then(res => {
             this._fe = res;
-            catSel.innerHTML = res.categories.map(c => `<option value="${c}">${res.labels[c] || c} (${res.byCat[c].length})</option>`).join('');
+            catSel.innerHTML = res.categories.map(c => `<option value="${c}">${t(res.labels[c] || c)} (${res.byCat[c].length})</option>`).join('');
             renderList();
         }).catch(e => {
             catSel.innerHTML = '<option value="">Load failed</option>';
-            status.textContent = `Failed to load front-end components: ${e.message}`;
+            status.textContent = t('Failed to load front-end components: {msg}', { msg: e.message });
         });
     }
 

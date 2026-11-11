@@ -54,6 +54,19 @@ body {
 
 /* Row 1 右侧的返回链接 */
 .sp-tb-nav { margin-left: auto; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; flex: 0 0 auto; }
+/* 语言切换（EN / 中）：与主编辑器 #langSwitch 同构（button[data-lang] + .active），配色走 --sp- 主题变量 */
+.sp-tb-nav .lang-switch {
+    display: inline-flex; align-items: stretch; height: 24px; flex: 0 0 auto;
+    border: 1px solid var(--sp-border); border-radius: 3px; overflow: hidden;
+    background: var(--sp-panel-2);
+}
+.sp-tb-nav .lang-switch button {
+    padding: 0 8px; border: none; background: transparent;
+    font-size: 12px; line-height: 22px; color: var(--sp-text-dim); cursor: pointer;
+}
+.sp-tb-nav .lang-switch button + button { border-left: 1px solid var(--sp-border); }
+.sp-tb-nav .lang-switch button:hover { color: var(--sp-accent); }
+.sp-tb-nav .lang-switch button.active { background: var(--sp-accent); color: var(--sp-on-solid); }
 /* 明暗切换开关（文字随当前主题显示“切换目标”） */
 .sp-gbtn-theme { background: var(--sp-panel-2); color: var(--sp-text); border: 1px solid var(--sp-border); border-radius: 3px; line-height: 22px; padding: 0 10px; white-space: nowrap; cursor: pointer; flex: 0 0 auto; }
 .sp-gbtn-theme:hover { border-color: var(--sp-accent); color: var(--sp-text-strong); }

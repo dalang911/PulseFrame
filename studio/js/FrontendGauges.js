@@ -16,6 +16,7 @@
 
 import { makeUid } from './runtime/spec.js';
 import { specStore } from './SpecStore.js';
+import { t } from '../../js/core/i18n.js';
 
 // 前端 Leafer tag → studio 图层 type；Ellipse 需按是否有角度参数分流 arc/ellipse
 const TAG_TYPE = { Rect: 'rect', Text: 'text', Line: 'line', Image: 'image', Box: 'group', Path: 'path', Polygon: 'polygon' };
@@ -84,7 +85,7 @@ export function defToLayers(def) {
 /** 导入组件到当前画布（包成可整体拖动的 group）；失败抛异常由调用方提示 */
 export function importDef(def) {
     const { layers, skipped, size } = defToLayers(def);
-    if (!layers.length) throw new Error('No importable layers were generated');
+    if (!layers.length) throw new Error(t('No importable layers were generated'));
     const group = {
         uid: makeUid(), name: def.name || def.id, type: 'group', visible: true,
         props: { x: 60, y: 60, width: size.width, height: size.height, rotation: 0, opacity: 1 },

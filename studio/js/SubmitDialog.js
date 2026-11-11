@@ -14,6 +14,7 @@ import { studioCanvas } from './StudioCanvas.js';
 import { apiBase } from './lib/appConfig.js';
 import { validateSpec } from './lib/validateSpec.js';
 import { findIdConflict, nextCandidateId } from './lib/idGuard.js';
+import { t } from '../../js/core/i18n.js';
 
 // 组件分类对齐主编辑器 WidgetPicker 的分类集合
 const CATEGORIES = [
@@ -43,7 +44,7 @@ class SubmitDialog {
                     <label class="sp-row"><span>Name</span><input type="text" id="sdName"></label>
                     <label class="sp-row"><span>Category</span><select id="sdCategory">${CATEGORIES.map(c => `<option value="${c.value}">${c.label}</option>`).join('')}</select></label>
                     <label class="sp-row"><span>Author</span><input type="text" id="sdAuthor" placeholder="Your nickname"></label>
-                    <label class="sp-row sp-row-col"><span>Description</span><textarea id="sdDesc" rows="3" placeholder="Optional"></textarea></label>
+                    <label class="sp-row sp-row-col"><span>Description</span><textarea id="sdDesc" rows="3" placeholder="${t('Optional')}"></textarea></label>
                     <div class="sp-terms">
                         <b>Before you submit</b>
                         <ul>
@@ -122,7 +123,7 @@ class SubmitDialog {
             console.warn('[SubmitDialog] 封面生成异常：', e && e.message);
             url = '';
         }
-        if (!url) this._hint('No cover captured — the shop card will show "No preview". The component itself is still submitted.');
+        if (!url) this._hint(t('No cover captured — the shop card will show "No preview". The component itself is still submitted.'));
         return url;
     }
 
@@ -134,7 +135,7 @@ class SubmitDialog {
             body: JSON.stringify(payload)
         });
         const ct = res.headers.get('content-type') || '';
-        if (!ct.includes('application/json')) throw new Error('Backend unavailable (non-JSON response)');
+        if (!ct.includes('application/json')) throw new Error(t('Backend unavailable (non-JSON response)'));
         return await res.json();
     }
 
@@ -142,14 +143,14 @@ class SubmitDialog {
         const m = this._modal;
         // 按钮已经拦一道，这里再兜一下（比如用户勾完后用脚本/回车触发提交）：没同意就不上传
         if (!m.querySelector('#sdAgree').checked) {
-            this._hint('Please tick the agreement first — publishing hands the component to the public library.');
+            this._hint(t('Please tick the agreement first — publishing hands the component to the public library.'));
             return;
         }
         const name = m.querySelector('#sdName').value.trim();
         const category = m.querySelector('#sdCategory').value;
         const author = m.querySelector('#sdAuthor').value.trim() || 'Anonymous';
         const description = m.querySelector('#sdDesc').value.trim();
-        if (!name) { alert('Please enter a component name'); return; }
+        if (!name) { alert(t('Please enter a component name')); return; }
         this._hint('');
 
         // 回填 meta（保持同一 id，便于本地覆盖保存）
@@ -161,25 +162,26 @@ class SubmitDialog {
         const spec = specStore.getSpec();
         const { errors } = validateSpec(spec);
         if (errors.length) {
-            this._hint('Fix before submitting: ' + errors.slice(0, 3).join(' / '));
-            alert('Please fix these issues first:\n\n' + errors.slice(0, 8).join('\n') + (errors.length > 8 ? `\n(+${errors.length - 8} more)` : ''));
+            const zhErrors = errors.map(e => t(e));
+            this._hint(t('Fix before submitting: {msg}', { msg: zhErrors.slice(0, 3).join(' / ') }));
+            alert(t('Please fix these issues first:') + '\n\n' + zhErrors.slice(0, 8).join('\n') + (errors.length > 8 ? '\n' + t('(+{n} more)', { n: errors.length - 8 }) : ''));
             return;
         }
         if (!String(spec.meta.id || '').trim()) {
-            this._hint('Component ID is empty — set the ID field in the top bar first.');
-            alert('Component ID is empty — the library registers components by meta.id, please set it first');
+            this._hint(t('Component ID is empty — set the ID field in the top bar first.'));
+            alert(t('Component ID is empty — the library registers components by meta.id, please set it first'));
             return;
         }
         // 进库的东西要能装得上、能驱动：空图层 = 一张透明盒子；非法字符的 id 会被服务端
         // 剔除后再查重，容易让人误以为“凭空撞号”，两者都在上传前拦住。
         if (!Array.isArray(spec.layers) || !spec.layers.length) {
-            this._hint('The component has no layers — add something to the canvas before submitting.');
-            alert('Nothing to publish: the canvas has no layers yet');
+            this._hint(t('The component has no layers — add something to the canvas before submitting.'));
+            alert(t('Nothing to publish: the canvas has no layers yet'));
             return;
         }
         if (!/^[A-Za-z0-9_]+$/.test(String(spec.meta.id))) {
-            this._hint('Component ID may only contain letters, digits and "_".');
-            alert('Component ID "' + spec.meta.id + '" is invalid — use only A-Z a-z 0-9 and _');
+            this._hint(t('Component ID may only contain letters, digits and "_".'));
+            alert(t('Component ID "{id}" is invalid — use only A-Z a-z 0-9 and _', { id: spec.meta.id }));
             return;
         }
 
@@ -197,7 +199,7 @@ class SubmitDialog {
         };
 
         const btn = m.querySelector('#sdSubmit');
-        this._posting = true; btn.disabled = true; btn.textContent = 'Submitting…';
+        this._posting = true; btn.disabled = true; btn.textContent = t('Submitting…');
         try {
             let result = await this._post(payload);
             // 409：库里已有同一组件 id 的存活记录。别人的提交本地看不见，只能由服务器判定；
@@ -205,27 +207,27 @@ class SubmitDialog {
             if (result && result.code === 'duplicate_spec_id') {
                 const cur = String(specStore.getSpec().meta.id || '');
                 const cand = this._bumpPastTaken(cur);
-                if (confirm(`Component ID "${cur}" is already used in the library:\n\n${result.error || ''}\n\nResubmit as "${cand}"?`)) {
+                if (confirm(t('Component ID "{cur}" is already used in the library:\n\n{error}\n\nResubmit as "{cand}"?', { cur, error: result.error || '', cand }))) {
                     specStore.setMeta({ id: cand }, true);
-                    this._hint(`Resubmitting as "${cand}"…`);
+                    this._hint(t('Resubmitting as "{cand}"…', { cand }));
                     result = await this._post({ ...payload, json_content: specStore.exportString() });
-                    if (result.success) { alert(`Submitted as "${cand}", waiting for admin review!`); this._close(); return; }
+                    if (result.success) { alert(t('Submitted as "{cand}", waiting for admin review!', { cand })); this._close(); return; }
                 } else {
-                    this._hint(`ID "${cur}" is taken — change the ID field in the top bar, or ask an admin to remove the old row.`);
+                    this._hint(t('ID "{cur}" is taken — change the ID field in the top bar, or ask an admin to remove the old row.', { cur }));
                 }
             }
             if (result.success) {
-                alert('Submitted, waiting for admin review!');
+                alert(t('Submitted, waiting for admin review!'));
                 this._close();
             } else {
-                this._hint(result.error ? `Submission failed: ${result.error}` : '');
-                alert('Submission failed: ' + (result.error || 'unknown error'));
+                this._hint(result.error ? t('Submission failed: {msg}', { msg: result.error }) : '');
+                alert(t('Submission failed: {msg}', { msg: result.error || t('unknown error') }));
             }
         } catch (e) {
-            alert('Submission failed: ' + e.message);
+            alert(t('Submission failed: {msg}', { msg: e.message }));
         } finally {
             this._posting = false;
-            btn.textContent = 'Submit for review';
+            btn.textContent = t('Submit for review');
             this._syncSubmit();   // 回到“没勾同意就置灰”的门控状态
         }
     }

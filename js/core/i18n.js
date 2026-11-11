@@ -9,12 +9,29 @@
  *     轻提示等动态插入的内容），组合串 / 原生 alert、confirm / 画布文字在调用处用 t()。
  *   - 语言选择持久化在 localStorage（pulseframe_lang），默认 en；
  *     切换 = 持久化 + 刷新页面（画布状态本就不持久化，刷新与现有行为一致）。
- *   - 不触碰 studio/：Studio 不加载本模块，观感不变。
+ *   - Studio 复用本模块（同一单例、同一存储键），自己的词条经 registerDictionary()
+ *     注入（studio/js/i18n.zh.js）；主编辑器不注册额外词典，行为与观感不变。
  */
 
 import { ZH_DICT, ZH_PATTERNS } from './i18n.zh.js';
 
 const STORAGE_KEY = 'pulseframe_lang';
+
+// 额外词典 / 模式（registerDictionary 注入，主编辑器恒为空）
+const EXTRA_DICTS = [];
+const EXTRA_PATTERNS = [];
+
+/**
+ * 注册额外词典（Studio 复用本核心时调用，需在 t()/initI18n() 之前）。
+ * 查找顺序：主词典 → 各额外词典（按注册序）→ 主模式 → 各额外模式；
+ * 精确键永远优先于正则。纯增量：不调用时行为与之前逐字节一致。
+ * @param {Object} dict - 英文原文 → 中文 的精确映射
+ * @param {Array<[RegExp, string]>} [patterns] - 正则模式，模板用 {1}/{2} 引用捕获组
+ */
+export function registerDictionary(dict, patterns) {
+    if (dict && typeof dict === 'object') EXTRA_DICTS.push(dict);
+    if (Array.isArray(patterns)) EXTRA_PATTERNS.push(...patterns);
+}
 
 let _lang = 'en';
 try {
@@ -44,13 +61,21 @@ function fill(text, params) {
     return text.replace(/\{(\w+)\}/g, (m, k) => (params[k] != null ? String(params[k]) : m));
 }
 
-/** 查一条完整文案的中文翻译：先精确字典，再正则模式；未命中返回 null */
+/** 查一条完整文案的中文翻译：先精确字典（主→额外），再正则模式（主→额外）；未命中返回 null */
 function lookupZh(text) {
     const hit = ZH_DICT[text];
     if (hit !== undefined) return hit;
+    for (let i = 0; i < EXTRA_DICTS.length; i++) {
+        const h = EXTRA_DICTS[i][text];
+        if (h !== undefined) return h;
+    }
     for (let i = 0; i < ZH_PATTERNS.length; i++) {
         const m = text.match(ZH_PATTERNS[i][0]);
         if (m) return fill(ZH_PATTERNS[i][1], m);
+    }
+    for (let i = 0; i < EXTRA_PATTERNS.length; i++) {
+        const m = text.match(EXTRA_PATTERNS[i][0]);
+        if (m) return fill(EXTRA_PATTERNS[i][1], m);
     }
     return null;
 }

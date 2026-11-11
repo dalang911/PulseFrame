@@ -11,6 +11,7 @@
 
 import { specStore } from './SpecStore.js';
 import { studioCanvas } from './StudioCanvas.js';
+import { t } from '../../js/core/i18n.js';
 
 const esc = (s) => String(s == null ? '' : s).replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
@@ -216,12 +217,12 @@ class MultiSelectPanel {
     }
 
     _toast(msg) {
-        let t = document.getElementById('spToast');
-        if (!t) { t = document.createElement('div'); t.id = 'spToast'; t.className = 'sp-toast'; document.body.appendChild(t); }
-        t.textContent = msg;
-        t.classList.add('show');
+        let el = document.getElementById('spToast');
+        if (!el) { el = document.createElement('div'); el.id = 'spToast'; el.className = 'sp-toast'; document.body.appendChild(el); }
+        el.textContent = t(msg);
+        el.classList.add('show');
         clearTimeout(this._toastTimer);
-        this._toastTimer = setTimeout(() => t.classList.remove('show'), 1500);
+        this._toastTimer = setTimeout(() => el.classList.remove('show'), 1500);
     }
 }
 

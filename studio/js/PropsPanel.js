@@ -9,6 +9,7 @@
 import { specStore } from './SpecStore.js';
 import { studioCanvas } from './StudioCanvas.js';
 import { normalizeSvg, svgIconBox, svgByteLength, SVG_MAX_BYTES } from './runtime/spec.js';
+import { t } from '../../js/core/i18n.js';
 
 const ICONFONT_URL = 'https://www.iconfont.cn/collections';
 
@@ -224,7 +225,8 @@ class PropsPanel {
         const bytes = res && res.ok ? res.bytes : svgByteLength(raw);   // 合法时按规范化后的字节数（= 真正落库的体积）
         const bad = bytes > SVG_MAX_BYTES || (res && res.ok === false);
         const err = res && !res.ok ? res.error : '';
-        el.textContent = fmtBytes(bytes) + ' / ' + fmtBytes(SVG_MAX_BYTES) + (err ? ' · ' + err : '');
+        // 报错嵌在体积组合行里，walker 的整句匹配够不着，这里单独 t()
+        el.textContent = fmtBytes(bytes) + ' / ' + fmtBytes(SVG_MAX_BYTES) + (err ? ' · ' + t(err) : '');
         el.className = 'sp-svg-size' + (bad ? ' err' : '');
     }
 }

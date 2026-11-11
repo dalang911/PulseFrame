@@ -8,6 +8,7 @@
 
 import { specStore } from './SpecStore.js';
 import { fieldsByGroup } from './fieldCatalog.js';
+import { t } from '../../js/core/i18n.js';
 
 // 每个 type 的可绑定属性 → 允许的 mode 列表（'none' 表示解除绑定）
 // 判据：属性在 PropsPanel 可编辑 + bindingEngine 各 mode 天然支持任意数字属性（size/angle 用 binding.prop 定位）
@@ -103,7 +104,8 @@ function fieldOptions(selected) {
     let html = `<option value="">(select field)</option>`;
     ['value', 'derived', 'extreme'].forEach(g => {
         if (!groups[g]) return;
-        html += `<optgroup label="${labels[g]}">` + groups[g].map(f =>
+        // optgroup 的 label 属性不在 DOM 翻译器覆盖范围，组合时直接 t()
+        html += `<optgroup label="${t(labels[g])}">` + groups[g].map(f =>
             `<option value="${esc(f.key)}" ${f.key === selected ? 'selected' : ''}>${esc(f.label)}</option>`).join('') + `</optgroup>`;
     });
     return html;
@@ -115,7 +117,7 @@ function boundSelectHtml(selected) {
     const { groups, labels } = fieldsByGroup();
     ['value', 'derived', 'extreme'].forEach(g => {
         if (!groups[g]) return;
-        html += `<optgroup label="${labels[g]}">` + groups[g].map(f =>
+        html += `<optgroup label="${t(labels[g])}">` + groups[g].map(f =>
             `<option value="${esc(f.key)}" ${f.key === selected ? 'selected' : ''}>${esc(f.label)}</option>`).join('') + `</optgroup>`;
     });
     return html;
@@ -195,10 +197,10 @@ class BindingPanel {
     }
 
     _thresholds(list) {
-        return list.map((t, i) => `
+        return list.map((thr, i) => `
             <div class="sp-thr-row" data-i="${i}">
-                <input type="number" class="sp-thr-gte" placeholder="≥" value="${esc(t.gte == null ? '' : t.gte)}">
-                <input type="text" class="sp-thr-color" placeholder="#color" value="${esc(t.color || '')}">
+                <input type="number" class="sp-thr-gte" placeholder="≥" value="${esc(thr.gte == null ? '' : thr.gte)}">
+                <input type="text" class="sp-thr-color" placeholder="#color" value="${esc(thr.color || '')}">
                 <button data-act="del-thr" title="Delete">✕</button>
             </div>`).join('');
     }

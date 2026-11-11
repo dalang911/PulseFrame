@@ -44,12 +44,13 @@ class LayerPanel {
         };
         walk(spec.layers, 0);
 
+        // 类型/名称是数据不是 UI 文案：data-i18n-skip 防翻译（名称可能撞词典键，如 'Icon'）
         this._root.innerHTML = rows.map(({ layer, depth }) => `
             <div class="sp-layer ${layer.uid === specStore.selectedUid ? 'selected' : ''}" data-uid="${layer.uid}" data-group="${layer.type === 'group' ? 1 : 0}" draggable="true" style="padding-left:${4 + depth * 14}px" title="Drag to reorder or move in/out of a group">
                 <span class="sp-layer-drag">⠿</span>
                 <button class="sp-eye" data-act="toggle" title="Show/Hide">${layer.visible === false ? '🚫' : '👁'}</button>
-                <span class="sp-layer-type">${esc(layer.type)}</span>
-                <span class="sp-layer-name">${esc(layer.name)}</span>
+                <span class="sp-layer-type" data-i18n-skip>${esc(layer.type)}</span>
+                <span class="sp-layer-name" data-i18n-skip>${esc(layer.name)}</span>
                 <span class="sp-layer-acts">
                     <button data-act="up" title="Move up">↑</button>
                     <button data-act="down" title="Move down">↓</button>

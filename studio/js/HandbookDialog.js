@@ -41,7 +41,9 @@ class HandbookDialog {
                     <h3>AI Handbook · authoring a component</h3>
                     <button class="sp-modal-x" data-close>&times;</button>
                 </div>
-                <div class="sp-modal-body">
+                <!-- 正文是英文手册的镜像（与可下载的 ALL_IN_ONE.md 同源），整体不翻译；
+                     其中的 <code> 字段名也会撞词典键，data-i18n-skip 一并挡住 -->
+                <div class="sp-modal-body" data-i18n-skip>
                     <p class="sp-doc-lede">What you build here is a <b>Component Spec</b> — one JSON object
                     (<code>meta</code> + <code>layers</code>). The main editor renders it with Leafer and drives it
                     with live track data. Click it together on the canvas, or write the JSON yourself: both roads
