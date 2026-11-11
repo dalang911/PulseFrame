@@ -11,6 +11,7 @@
 
 import { store } from '../core/Store.js';
 import { templateManager } from './TemplateManager.js';
+import { t, isZh } from '../core/i18n.js';
 
 let _inited = false;
 
@@ -36,7 +37,7 @@ function withLayer(cb) {
 /** 保存当前画布为具名模板 */
 function openSaveDialog() {
     if (!templateManager.serialize()) { toast('Canvas not ready', 2); return; }
-    const defName = 'Template ' + new Date().toLocaleString('en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const defName = t('Template {date}', { date: new Date().toLocaleString(isZh() ? 'zh-CN' : 'en-US', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) });
 
     withLayer((layer) => {
         layer.open({
@@ -58,7 +59,7 @@ function openSaveDialog() {
                 if (!name) { toast('Please enter a template name', 2); return; }
                 const key = templateManager.saveLocal(name);
                 layer.close(index);
-                toast(key ? 'Template saved: ' + name : 'Save failed', key ? 1 : 2);
+                toast(key ? t('Template saved: {name}', { name }) : 'Save failed', key ? 1 : 2);
             }
         });
     });
@@ -89,11 +90,11 @@ function openLibraryDialog() {
                         listBox.innerHTML = '<div style="color:#999;text-align:center;padding:40px 0;">No saved templates yet</div>';
                         return;
                     }
-                    listBox.innerHTML = list.map((t, i) => `
-                        <div class="tpl-item" data-name="${escapeAttr(t.name)}" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #eee;border-radius:4px;margin-bottom:8px;">
+                    listBox.innerHTML = list.map((tpl, i) => `
+                        <div class="tpl-item" data-name="${escapeAttr(tpl.name)}" style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #eee;border-radius:4px;margin-bottom:8px;">
                             <div style="flex:1;min-width:0;">
-                                <div style="font-weight:bold;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(t.name)}</div>
-                                <div style="color:#999;font-size:12px;">${t.componentCount} components${t.createdAt ? ' · ' + escapeHtml(String(t.createdAt).slice(0, 10)) : ''}</div>
+                                <div style="font-weight:bold;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(tpl.name)}</div>
+                                <div style="color:#999;font-size:12px;">${t('{n} components', { n: tpl.componentCount })}${tpl.createdAt ? ' · ' + escapeHtml(String(tpl.createdAt).slice(0, 10)) : ''}</div>
                             </div>
                             <button type="button" class="layui-btn layui-btn-xs tpl-load">Load</button>
                             <button type="button" class="layui-btn layui-btn-xs layui-btn-danger tpl-del">Delete</button>
@@ -114,10 +115,10 @@ function openLibraryDialog() {
                     if (e.target.classList.contains('tpl-load')) {
                         if (!hasData()) { toast('Upload a data file first, then load the template', 2); return; }
                         templateManager.loadLocal(name);
-                        toast('Template loaded: ' + name, 1);
+                        toast(t('Template loaded: {name}', { name }), 1);
                         layer.closeAll('page');
                     } else if (e.target.classList.contains('tpl-del')) {
-                        if (!confirm('Delete template "' + name + '"?')) return;
+                        if (!confirm(t('Delete template "{name}"?', { name }))) return;
                         templateManager.deleteLocal(name);
                         renderList();
                     }
@@ -132,7 +133,7 @@ function openLibraryDialog() {
                     if (!hasData()) { toast('Upload a data file first, then import the template', 2); return; }
                     templateManager.importFile(file)
                         .then(() => toast('Template imported', 1))
-                        .catch((err) => toast('Import failed: ' + err.message, 2))
+                        .catch((err) => toast(t('Import failed: {msg}', { msg: t(err.message) }), 2))
                         .finally(() => { fileInput.value = ''; });
                 };
 

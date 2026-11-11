@@ -38,14 +38,14 @@ export function presetNameOf(url, presets = AVATAR_PRESETS) {
 export function imageToSquareDataUrl(file, size = 256) {
     return new Promise((resolve, reject) => {
         if (!file || !/^image\//.test(file.type || '')) {
-            reject(new Error('请选择图片文件'));
+            reject(new Error('Please select an image file'));
             return;
         }
         const reader = new FileReader();
-        reader.onerror = () => reject(new Error('文件读取失败'));
+        reader.onerror = () => reject(new Error('Failed to read the file'));
         reader.onload = (ev) => {
             const img = new Image();
-            img.onerror = () => reject(new Error('图片解码失败（格式可能不受浏览器支持）'));
+            img.onerror = () => reject(new Error('Image decode failed (the format may not be supported by this browser)'));
             img.onload = () => {
                 try {
                     const canvas = document.createElement('canvas');
@@ -56,7 +56,7 @@ export function imageToSquareDataUrl(file, size = 256) {
                     ctx.drawImage(img, 0, 0, size, size);
                     resolve(canvas.toDataURL('image/png'));
                 } catch (err) {
-                    reject(new Error('图片转换失败：' + err.message));
+                    reject(new Error('Image conversion failed: ' + err.message));
                 }
             };
             img.src = ev.target.result;

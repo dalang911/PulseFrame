@@ -11,6 +11,7 @@ import { unitConfig } from '../../core/UnitConfig.js';
 import { resizeScale } from '../../utils/math.js';
 import { AVATAR_PRESETS } from '../../utils/images.js';
 import { sampleSeriesAt, sliceSeriesTo } from '../../data/frameSampling.js';
+import { t } from '../../core/i18n.js';
 
 const textshadow = { x: 2, y: 2, blur: 0, color: '#333333' };
 
@@ -108,7 +109,7 @@ const l_distance_pan = {
             { tag: 'Line', width: 800, x: 90, y: 25, strokeWidth: 40, stroke: config.rulerColor2 || '#FFFFFF', dashPattern: [3, 97] },
             {
                 tag: 'Text', resizeFontSize: true, x: 50, y: 10, fontSize: 20, fontWeight: 'black',
-                text: 'Start', fill: config.startColor || '#FFFFFF', textAlign: 'center', verticalAlign: 'top'
+                text: t('Start'), fill: config.startColor || '#FFFFFF', textAlign: 'center', verticalAlign: 'top'
             },
             {
                 tag: 'Text', resizeFontSize: true, x: 940, y: 10, fontSize: 20, fontWeight: 'black',

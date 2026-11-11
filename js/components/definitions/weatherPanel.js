@@ -23,6 +23,7 @@ import {
     FONT_WEIGHT_OPTIONS
 } from './weatherCommon.js';
 import { el_weather_wide_pan } from './weatherWide.js';
+import { t } from '../../core/i18n.js';
 
 // 升级前写死的那套几何值，集中放这里，build 只从这些常量取值
 const SQUARE = {
@@ -112,7 +113,7 @@ const el_weather_pan = {
     build(config) {
         const cfg = config || {};
         // 天气状况默认文案跟着图标名称走（conditionText 填了就用填的）
-        const conditionLabel = WEATHER_LABELS[str(cfg.weatherIcon, 'sunny')] || WEATHER_LABELS.sunny;
+        const conditionLabel = t(WEATHER_LABELS[str(cfg.weatherIcon, 'sunny')] || WEATHER_LABELS.sunny);
         const children = [
             weatherBackground({
                 name: 'bg', width: SQUARE.width, height: SQUARE.height, config: cfg,

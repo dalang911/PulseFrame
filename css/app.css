@@ -106,13 +106,49 @@ html, body {
     white-space: nowrap;
 }
 
-/* 右侧按钮组为绝对定位（最近的一个在 right:240px）：窄屏逐级折叠附加文字，品牌与副标题始终保留 */
+/* 右侧按钮组为绝对定位（最近的一个在 right:350px）：窄屏逐级折叠附加文字，品牌与副标题始终保留 */
 @media (max-width: 1280px) {
     .layui-nav .nav-tag { display: none; }
 }
 
 @media (max-width: 1050px) {
     .layui-nav .nav-sub { display: none; }
+}
+
+/* ===== 语言切换（EN / 中）===== */
+/* .layui-nav 是 font-size:0，按钮必须自带字号；整组垂直居中于 40px 导航 */
+.lang-switch {
+    display: inline-flex;
+    align-items: stretch;
+    height: 22px;
+    vertical-align: middle;
+    border: 1px solid #d2d2d2;
+    border-radius: 3px;
+    overflow: hidden;
+    background-color: #fff;
+}
+
+.lang-switch button {
+    padding: 0 8px;
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    line-height: 20px;
+    color: #555;
+    cursor: pointer;
+}
+
+.lang-switch button + button {
+    border-left: 1px solid #d2d2d2;
+}
+
+.lang-switch button:hover {
+    color: #1E9FFF;
+}
+
+.lang-switch button.active {
+    background-color: #1E9FFF;
+    color: #fff;
 }
 
 /* ===== 左侧组件选择器 ===== */

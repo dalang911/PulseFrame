@@ -6,6 +6,7 @@
  */
 
 import { store } from '../../core/Store.js';
+import { t } from '../../core/i18n.js';
 
 const textshadow = { x: 2, y: 2, blur: 0, color: '#333333' };
 
@@ -171,7 +172,7 @@ const appv_lap_pan = {
             width: 400,
             fontSize: 20,
             fontWeight: 'black',
-            text: `1Km time: 00:00\n2Km time: 03:00`,
+            text: t('1Km time: 00:00\n2Km time: 03:00'),
             fill: config.textColor || '#FFFFFF',
             textAlign: 'right',
             verticalAlign: 'top',
@@ -352,7 +353,7 @@ const appv_lap_user_pan = {
             if (showHeader) {
                 children.push(text({
                     name: 'lap_head_' + c.key, x: c.x, y: 0, fontSize: hfs,
-                    text: c.title, fill: headFill
+                    text: t(c.title), fill: headFill
                 }));
             }
             children.push(text({

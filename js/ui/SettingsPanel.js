@@ -21,6 +21,7 @@ import {
     getNestedValue,
     setNestedValue
 } from './PropertyRenderer.js';
+import { t } from '../core/i18n.js';
 
 class SettingsPanel {
     constructor() {
@@ -86,7 +87,7 @@ class SettingsPanel {
         header.style.cssText = 'padding:4px 8px; font-size:12px; font-weight:bold; border-bottom:1px solid #ddd; background:#fff; display:flex; align-items:center; justify-content:space-between; gap:6px;';
         const titleSpan = document.createElement('span');
         titleSpan.style.cssText = 'flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-        titleSpan.textContent = `⚙ ${definition.name || componentId}`;
+        titleSpan.textContent = '⚙ ' + t(definition.name || componentId);
         titleSpan.title = componentId;
         header.appendChild(titleSpan);
 

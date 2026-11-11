@@ -19,6 +19,7 @@ import { openCanvasResolutionDialog } from './ui/CanvasResolutionDialog.js';
 import { initAlignTools } from './ui/AlignTools.js';
 import { initTemplateLibrary } from './ui/TemplateLibrary.js';
 import { initGlobalFont } from './core/GlobalFont.js';
+import { t, initI18n } from './core/i18n.js';
 
 // 导入组件定义（触发注册到 registry）
 import './components/definitions/index.js';
@@ -53,6 +54,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 全局字体：订阅组件事件 + 恢复上次保存的字体（依赖已注册的 frame）
     initGlobalFont();
+
+    // 双语：绑定 EN/中 切换按钮；zh 模式启动 DOM 翻译（en 模式零开销）
+    initI18n();
 
     console.log('[App] Initialization complete');
 });
@@ -181,7 +185,7 @@ function initFileUpload() {
             eventBus.emit(Events.DATA_LOADED, rq);
         } catch (err) {
             console.error('[App] Data processing error:', err);
-            alert('Data parsing failed: ' + err.message);
+            alert(t('Data parsing failed: {msg}', { msg: t(err.message) }));
         }
     });
 }
@@ -353,7 +357,7 @@ function initRatioSwitch() {
             el.classList.toggle('layui-btn-normal', on);
             el.classList.toggle('layui-btn-primary', !on);
         });
-        if (btnCustom) btnCustom.title = `Custom resolution (current ${size.width}×${size.height})`;
+        if (btnCustom) btnCustom.title = t('Custom resolution (current {w}×{h})', { w: size.width, h: size.height });
     };
 
     btn169.addEventListener('click', () => {
@@ -380,7 +384,7 @@ function initRatioSwitch() {
  */
 function notifyCanvasReset(size) {
     if (!window.layui) return;
-    const text = `Canvas set to ${size.width}×${size.height}; components cleared, please re-add them`;
+    const text = t('Canvas set to {w}×{h}; components cleared, please re-add them', { w: size.width, h: size.height });
     const show = () => layui.layer.msg(text, { icon: 1, time: 1800 });
     if (layui.layer && layui.layer.msg) show();
     else if (typeof layui.use === 'function') layui.use(['layer'], show);

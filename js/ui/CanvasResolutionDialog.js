@@ -17,11 +17,13 @@ import {
     canvasAspectLabel
 } from '../core/constants.js';
 import { applyCanvasSize } from './CanvasResizer.js';
+import { t } from '../core/i18n.js';
 
 const SHAPE_BOX_W = 108;
 const SHAPE_BOX_H = 68;
 
-const CONSTRAINT_HELP = `Width and height are rounded to even numbers: H.264 and VP9 use 4:2:0 chroma subsampling and reject odd dimensions. Each side is clamped to ${CANVAS_SIZE_MIN}-${CANVAS_SIZE_MAX}. Total pixels are capped at ${CANVAS_MAX_PIXELS.toLocaleString('en-US')} (4096x2304, the largest frame H.264 level 5.1 accepts); anything larger is scaled down proportionally, keeping the aspect ratio you chose. The middle preview always scales to fit its container, and the exported video uses the exact resolution.`;
+const CONSTRAINT_HELP = t('Width and height are rounded to even numbers: H.264 and VP9 use 4:2:0 chroma subsampling and reject odd dimensions. Each side is clamped to {min}-{max}. Total pixels are capped at {pixels} (4096x2304, the largest frame H.264 level 5.1 accepts); anything larger is scaled down proportionally, keeping the aspect ratio you chose. The middle preview always scales to fit its container, and the exported video uses the exact resolution.',
+    { min: CANVAS_SIZE_MIN, max: CANVAS_SIZE_MAX, pixels: CANVAS_MAX_PIXELS.toLocaleString('en-US') });
 
 /**
  * 打开自定义分辨率弹窗
@@ -104,7 +106,7 @@ function _show(layer, onApplied) {
             </div>
 
             <div class="cr-note">
-                <span class="cr-help" title="${escapeAttr(CONSTRAINT_HELP)}">?</span>Even numbers only &middot; ${CANVAS_SIZE_MIN}&ndash;${CANVAS_SIZE_MAX} per side &middot; up to 4096&times;2304 pixels. Out-of-range values are adjusted automatically.
+                <span class="cr-help" title="${escapeAttr(CONSTRAINT_HELP)}">?</span>${t('Even numbers only · {min}–{max} per side · up to 4096×2304 pixels. Out-of-range values are adjusted automatically.', { min: CANVAS_SIZE_MIN, max: CANVAS_SIZE_MAX })}
             </div>
             <div class="cr-warn" style="display:none;"></div>
 
@@ -147,10 +149,10 @@ function _show(layer, onApplied) {
                 shape.style.height = `${Math.max(1, Math.round(size.height * k))}px`;
 
                 sizeText.textContent = `${size.width} × ${size.height}`;
-                const orientation = size.width > size.height ? 'Landscape'
-                    : size.width < size.height ? 'Portrait' : 'Square';
+                const orientation = t(size.width > size.height ? 'Landscape'
+                    : size.width < size.height ? 'Portrait' : 'Square');
                 const mp = (size.width * size.height / 1e6).toFixed(2);
-                detailText.textContent = `${canvasAspectLabel(size.width, size.height)} · ${orientation} · ${mp} MP`;
+                detailText.textContent = t('{aspect} · {orientation} · {mp} MP', { aspect: canvasAspectLabel(size.width, size.height), orientation, mp });
 
                 presetBtns.forEach(btn => {
                     const on = Number(btn.dataset.w) === size.width && Number(btn.dataset.h) === size.height;
@@ -159,7 +161,7 @@ function _show(layer, onApplied) {
 
                 const changed = size.width !== current.width || size.height !== current.height;
                 warn.style.display = changed && componentCount > 0 ? '' : 'none';
-                warn.textContent = `Applying resets the canvas and removes the ${componentCount} component${componentCount > 1 ? 's' : ''} on it.`;
+                warn.textContent = t('Applying resets the canvas and removes the {n} component{s} on it.', { n: componentCount, s: componentCount > 1 ? 's' : '' });
                 return size;
             };
 
@@ -214,7 +216,7 @@ function _show(layer, onApplied) {
                 };
                 if (componentCount > 0) {
                     layer.confirm(
-                        `Changing the resolution resets the canvas and removes ${componentCount} component${componentCount > 1 ? 's' : ''}. Continue?`,
+                        t('Changing the resolution resets the canvas and removes {n} component{s}. Continue?', { n: componentCount, s: componentCount > 1 ? 's' : '' }),
                         { icon: 3, title: 'Reset canvas?' },
                         (confirmIndex) => { layer.close(confirmIndex); commit(); }
                     );

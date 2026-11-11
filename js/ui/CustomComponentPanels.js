@@ -17,6 +17,7 @@ import { eventBus, Events } from '../core/EventBus.js';
 import { safeThumb } from '../core/appConfig.js';
 import { loadLocalComponents, LOCAL_PREFIX, REMOTE_EVENT, fetchRemoteRows, ensureRowRegistered, REMOTE_PAGE } from '../components/visual/loader.js';
 import { openSharedLibrary } from './SharedLibraryModal.js';
+import { t } from '../core/i18n.js';
 
 const CAT_LABELS = { running: 'Running', cycling: 'Cycling', swimming: 'Swimming', time: 'Time', distance: 'Distance', map: 'Map', chart: 'Chart', attr: 'Attribute', text: 'Text', theme: 'Theme' };
 
@@ -30,7 +31,7 @@ const escAttr = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&'
 function addVisualToCanvas(componentId) {
     const trkpt = store.get('trkptData');
     if (!trkpt || trkpt.length === 0) {
-        alert('Please upload gpx, tcx, fit data files first');
+        alert(t('Please upload gpx, tcx, fit data files first'));
         return;
     }
     const frame = canvasManager.frame;
@@ -102,10 +103,10 @@ class CustomPanel {
             defs.forEach(def => {
                 const isRemote = def.source === 'remote';
                 // 展示优先取 DB 行（与 Studio Open Library 对齐）；无 store 字段时回退到 spec 自身。
-                const cat = CAT_LABELS[def.storeCategory || def.category] || def.storeCategory || def.category || '';
+                const cat = t(CAT_LABELS[def.storeCategory || def.category] || def.storeCategory || def.category || '');
                 const size = `${def.defaultConfig?.width || '?'}×${def.defaultConfig?.height || '?'}`;
                 const name = (isRemote ? (def.storeTitle || def.name) : def.name) || def.id;
-                const author = isRemote && def.storeAuthor ? 'by ' + def.storeAuthor : '';
+                const author = isRemote && def.storeAuthor ? t('by {name}', { name: def.storeAuthor }) : '';
                 const initial = String(name).trim().charAt(0).toUpperCase() || 'C';
                 // id 尾缀：remote 直接展 DB 行 id（与 Studio Open Library 里的 #<row.id> 一致）；
                 // local 展 spec.meta.id 去前缀后尾 4 位，区分同名多次保存。
@@ -197,7 +198,7 @@ class CustomPanel {
         if (this._source !== 'local') return;
         const def = registry.get(componentId);
         const shown = def ? (def.name || def.id) : componentId;
-        if (!confirm('Delete local component "' + shown + '"?\nThis removes it from this browser and cannot be undone.')) return;
+        if (!confirm(t('Delete local component "{name}"?\nThis removes it from this browser and cannot be undone.', { name: shown }))) return;
         try { localStorage.removeItem(LOCAL_PREFIX + componentId); } catch (e) { /* ignore */ }
         // 当前画布上同 id 的实例一并移除，同时更新 activeComponents。
         try { removeComponentFromCanvas(componentId); } catch (e) { /* ignore */ }
@@ -385,7 +386,7 @@ class RemotePanel {
         const thumb = safeThumb(row.thumbnail);
         const name = row.title || ('#' + row.id);
         const initial = String(name).trim().charAt(0).toUpperCase() || 'C';
-        const cat = CAT_LABELS[row.category] || row.category || '';
+        const cat = t(CAT_LABELS[row.category] || row.category || '');
         const def = this._defFor(row.id);
         const size = def ? `${def.defaultConfig?.width || '?'}×${def.defaultConfig?.height || '?'}` : '';
         const meta = [cat, size, '#' + row.id, row.created_at].filter(Boolean).join(' · ');
@@ -419,7 +420,7 @@ class RemotePanel {
             const id = await ensureRowRegistered(row.id);
             def = id ? registry.get(id) : null;
         }
-        if (!def) { alert('Component content not available yet, try again in a moment'); return; }
+        if (!def) { alert(t('Component content not available yet, try again in a moment')); return; }
         addVisualToCanvas(def.id);
         this.markOnCanvas();
     }

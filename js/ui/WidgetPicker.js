@@ -9,6 +9,7 @@ import { addComponentToCanvas } from '../components/factory.js';
 import { store } from '../core/Store.js';
 import { canvasManager } from '../core/CanvasManager.js';
 import { eventBus, Events } from '../core/EventBus.js';
+import { t } from '../core/i18n.js';
 
 // 分类显示名（对齐老款程序 8 个 Tab）
 const CATEGORY_LABELS = {
@@ -169,7 +170,7 @@ class WidgetPicker {
         // 未上传数据时禁止添加组件（同老款程序）
         const trkpt = store.get('trkptData');
         if (!trkpt || trkpt.length === 0) {
-            alert('Please upload gpx, tcx, fit data files first');
+            alert(t('Please upload gpx, tcx, fit data files first'));
             return;
         }
 

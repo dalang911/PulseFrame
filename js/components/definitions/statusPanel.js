@@ -3,6 +3,7 @@
  * 显示速度/配速/心率/步频/步幅等实时数据
  */
 import { speedToPace, convertToDMS } from '../../utils/format.js';
+import { t } from '../../core/i18n.js';
 
 export default {
     id: 'appv_nowstatus_pan',
@@ -32,7 +33,7 @@ export default {
                 resizeFontSize: true,
                 fontSize: config.fontSize || 24,
                 fontWeight: 'black',
-                text: 'Speed: -- km/h\nPace: -- min/km\nHeart Rate: -- bpm\nCadence: -- steps/min\nStep: -- m',
+                text: t('Speed: -- km/h\nPace: -- min/km\nHeart Rate: -- bpm\nCadence: -- steps/min\nStep: -- m'),
                 fill: config.textColor || '#FFFFFF',
                 textAlign: 'left',
                 verticalAlign: 'top',
@@ -53,6 +54,7 @@ export default {
         const cadence = frameData.cadence || 0;
         const stepLength = frameData.step_length || 0;
 
-        children[0].text = `Speed: ${speed.toFixed(2)} km/h\nPace: ${pace} min/km\nHeart Rate: ${heartRate} bpm\nCadence: ${cadence} steps/min\nStep: ${stepLength} m`;
+        children[0].text = t('Speed: {speed} km/h\nPace: {pace} min/km\nHeart Rate: {hr} bpm\nCadence: {cad} steps/min\nStep: {step} m',
+            { speed: speed.toFixed(2), pace, hr: heartRate, cad: cadence, step: stepLength });
     }
 };

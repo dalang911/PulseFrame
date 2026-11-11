@@ -4,6 +4,7 @@
  */
 
 import { store } from '../core/Store.js';
+import { t } from '../core/i18n.js';
 import { generateVideo, abortRender } from '../renderer/frameRenderer.js';
 import { mapBridge } from '../map/MapBridge.js';
 import { secondsToHHMMSS } from '../utils/format.js';
@@ -25,15 +26,15 @@ const FPS_HELP = 'Frames per second.\n'
  * 内存那一行的悬停说明：钱花在哪、为什么帧率不影响它、超了怎么办。
  * 口径全部来自 constants.estimateRenderMemory，文案与它保持同一套（别在 UI 里另算一遍）。
  */
-const MEM_HELP = 'Rough upper bound on the memory this render needs.\n'
+const MEM_HELP = t('Rough upper bound on the memory this render needs.\n'
     + 'The encoded video is buffered entirely in the tab (MediaBunny BufferTarget), and when\n'
     + 'packing finishes the bytes are copied into a Blob, so the peak is about twice the file\n'
     + 'size, plus two full-size canvases (1920x1080 RGBA ~ 8 MB each) used per frame.\n'
     + 'File size grows with DURATION and FORMAT (MP4 8 Mbps ~ 1 MB/s, MOV ProRes 330 Mbps\n'
     + '~ 41 MB/s, WebM is quality-driven so MP4\'s rate is assumed). Frame rate does not\n'
     + 'change this estimate - it only multiplies render time.\n'
-    + `If it goes over ${fmtBytes(RENDER_MEMORY_BUDGET)}, split the clip into shorter Start/End ranges and render\n`
-    + 'them one by one; nothing is blocked here, this is only a warning.';
+    + 'If it goes over {budget}, split the clip into shorter Start/End ranges and render\n'
+    + 'them one by one; nothing is blocked here, this is only a warning.', { budget: fmtBytes(RENDER_MEMORY_BUDGET) });
 
 /** 字节数成人话：≥1 GB 显两位小数，否则取整 MB（弹窗那一行放不下第三种精度） */
 function fmtBytes(bytes) {
@@ -102,10 +103,11 @@ class VideoPanel {
     }
 
     _toast(text, isError) {
+        const msg = t(text);
         if (this._layer) {
-            this._layer.msg(text, { icon: isError ? 2 : 1, time: 3000 });
+            this._layer.msg(msg, { icon: isError ? 2 : 1, time: 3000 });
         } else {
-            alert(text);
+            alert(msg);
         }
     }
 
@@ -115,7 +117,7 @@ class VideoPanel {
     async openSetup() {
         this._layer = await this._getLayer();
         if (!this._layer || !this._layer.open) {
-            alert('UI layer (layui layer) not loaded, cannot open the video setup dialog');
+            alert(t('UI layer (layui layer) not loaded, cannot open the video setup dialog'));
             return;
         }
 
@@ -144,9 +146,9 @@ class VideoPanel {
         const fpsNow = normalizeVideoFps(store.get('videoFps'));
         const fpsIsPreset = VIDEO_FPS_PRESETS.includes(fpsNow);
         const fpsOptions = VIDEO_FPS_PRESETS
-            .map(v => `<option value="${v}"${v === fpsNow ? ' selected' : ''}>${v} fps${v === 1 ? ' (default)' : ''}</option>`)
+            .map(v => `<option value="${v}"${v === fpsNow ? ' selected' : ''}>${t(v === 1 ? '{n} fps (default)' : '{n} fps', { n: v })}</option>`)
             .join('')
-            + `<option value="custom"${fpsIsPreset ? '' : ' selected'}>Custom…</option>`;
+            + `<option value="custom"${fpsIsPreset ? '' : ' selected'}>${t('Custom…')}</option>`;
 
         this._setupIndex = this._layer.open({
             type: 1,
@@ -198,7 +200,7 @@ class VideoPanel {
                     <div style="margin-bottom: 8px;">
                         <label style="display: inline-block; width: 60px;">Max</label>
                         <span>${maxFrame - 1}</span>
-                        <span> | Total Time: ${fmtTime(maxFrame - 1)}</span>
+                        <span>${t(' | Total Time: {time}', { time: fmtTime(maxFrame - 1) })}</span>
                     </div>
                     <div id="vFrameCount" style="margin-bottom: 8px; color: #888;"></div>
                     <div id="vRenderHint" style="margin-bottom: 8px; color: #e74c3c;"></div>
@@ -274,8 +276,8 @@ class VideoPanel {
         const et = document.getElementById('vEndFrameTime');
         const fc = document.getElementById('vFrameCount');
         const hint = document.getElementById('vRenderHint');
-        if (st) st.textContent = `time: ${secondsToHHMMSS(trkpt[start].sec)}`;
-        if (et) et.textContent = `time: ${secondsToHHMMSS(trkpt[end].sec)}`;
+        if (st) st.textContent = t('time: {time}', { time: secondsToHHMMSS(trkpt[start].sec) });
+        if (et) et.textContent = t('time: {time}', { time: secondsToHHMMSS(trkpt[end].sec) });
 
         // Start/End 一直是「秒空间」的轨迹点范围，帧率只加密这一段：
         // 帧数 = 秒数 × fps，成片时长仍等于秒数 —— 文案把这个区别说清楚，别让人当成倍速。
@@ -284,14 +286,13 @@ class VideoPanel {
         const frames = seconds * fps;
         if (fc) {
             fc.textContent = fps === 1
-                ? `${seconds} frames total (1 frame = 1 second, output ≈ ${seconds} s)`
-                : `${seconds} s of data × ${fps} frame/s = ${frames} frames, output ≈ ${seconds} s (length unchanged)`;
+                ? t('{n} frames total (1 frame = 1 second, output ≈ {n} s)', { n: seconds })
+                : t('{sec} s of data × {fps} frame/s = {frames} frames, output ≈ {sec} s (length unchanged)', { sec: seconds, fps, frames });
         }
         if (hint) {
             hint.textContent = frames > RENDER_CHUNK_HINT
-                ? `Heads-up: ${frames} frames is over the 5000-frame chunk suggested above `
-                  + `(that is ${Math.floor(RENDER_CHUNK_HINT / fps)} s of data at ${fps} frame/s). `
-                  + 'Video length still ' + seconds + ' s; only render time grows.'
+                ? t('Heads-up: {frames} frames is over the 5000-frame chunk suggested above (that is {chunkSec} s of data at {fps} frame/s). Video length still {sec} s; only render time grows.',
+                    { frames, chunkSec: Math.floor(RENDER_CHUNK_HINT / fps), fps, sec: seconds })
                 : '';
         }
 
@@ -301,11 +302,10 @@ class VideoPanel {
         if (memEl) {
             const format = document.querySelector('input[name="videoFormat"]:checked')?.value || VIDEO_DEFAULTS.format;
             const mem = estimateRenderMemory({ seconds, videoFormat: format, canvasSize: store.get('canvasSize') });
-            memEl.textContent = `Memory ≈ ${fmtBytes(mem.peakBytes)} peak `
-                + `(2 × ${fmtBytes(mem.fileBytes)} file + ${fmtBytes(mem.canvasBytes)} canvases; `
-                + `${rateLabel(format)} × ${seconds} s)`
+            memEl.textContent = t('Memory ≈ {peak} peak (2 × {file} file + {canvases} canvases; {rate} × {sec} s)',
+                { peak: fmtBytes(mem.peakBytes), file: fmtBytes(mem.fileBytes), canvases: fmtBytes(mem.canvasBytes), rate: t(rateLabel(format)), sec: seconds })
                 + (mem.over
-                    ? ` — over the ${fmtBytes(mem.budgetBytes)} budget, render in chunks of ≤ ${mem.maxChunkSeconds} s`
+                    ? t(' — over the {budget} budget, render in chunks of ≤ {chunk} s', { budget: fmtBytes(mem.budgetBytes), chunk: mem.maxChunkSeconds })
                     : '');
             const row = memEl.parentElement;
             if (row) row.style.color = mem.wayOver ? '#e74c3c' : mem.over ? '#e67e22' : '#888';
@@ -366,7 +366,7 @@ class VideoPanel {
             // 地图预载 pass（约 5 秒）：位置仍走整秒栅格（跟升级前一样，见 MapBridge.preloadMaps），
             // 但进度按本次真实帧数报；无地图组件时自动跳过不增加等待
             const preloaded = await mapBridge.preloadMaps(startFrame, endFrame, fps, ({ percent, warmed, totalFrames }) =>
-                this._setStatus(`Preloading maps... ${percent}% (${warmed}/${totalFrames} frames @ ${fps} fps)`, false));
+                this._setStatus(t('Preloading maps... {percent}% ({warmed}/{total} frames @ {fps} fps)', { percent, warmed, total: totalFrames, fps }), false));
             if (preloaded) this._setStatus('Maps preloaded, starting render', false);
 
             const blob = await generateVideo({
@@ -380,11 +380,11 @@ class VideoPanel {
             store.set('videoBlob', blob, true);
             this._updateProgress(renderFrames - 1, renderFrames);
             this._showResult(blob, videoFormat);
-            this._setStatus(`Video generated (${renderFrames / fps} s @ ${fps} frame/s)`, false);
+            this._setStatus(t('Video generated ({sec} s @ {fps} frame/s)', { sec: renderFrames / fps, fps }), false);
         } catch (err) {
             const msg = err && err.message ? err.message : String(err);
             const aborted = /abort|终止/i.test(msg);
-            this._showError(aborted ? `Render aborted: ${msg}` : `Generation failed: ${msg}`);
+            this._showError(aborted ? t('Render aborted: {msg}', { msg: t(msg) }) : t('Generation failed: {msg}', { msg: t(msg) }));
             console.error('[VideoPanel] Render failed:', err);
         } finally {
             if (btn) {
@@ -447,7 +447,7 @@ class VideoPanel {
             }
         });
 
-        this._setStatus(`Video generating... 0/${totalFrames}`, false);
+        this._setStatus(t('Video generating... 0/{total}', { total: totalFrames }), false);
     }
 
     _updateProgress(current, total) {
@@ -455,8 +455,9 @@ class VideoPanel {
         if (!el) return;
         const percent = total > 1 ? Math.round((current / (total - 1)) * 100) : 100;
         el.style.color = '#333';
-        el.textContent = `Video generating... ${current}/${total} (${percent}%)`;
-        this._setStatus(`Video generating... ${current}/${total} (${percent}%)`, false);
+        const progressText = t('Video generating... {current}/{total} ({percent}%)', { current, total, percent });
+        el.textContent = progressText;
+        this._setStatus(progressText, false);
     }
 
     _showResult(blob, videoFormat) {
@@ -474,7 +475,7 @@ class VideoPanel {
         this._videoUrl = URL.createObjectURL(blob);
 
         if (progressEl) {
-            progressEl.textContent = `Video generated! (${(blob.size / 1024 / 1024).toFixed(2)} MB)`;
+            progressEl.textContent = t('Video generated! ({mb} MB)', { mb: (blob.size / 1024 / 1024).toFixed(2) });
             progressEl.style.color = '#16b777';
         }
         if (runtimeEl) {

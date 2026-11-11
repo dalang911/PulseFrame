@@ -427,7 +427,7 @@ class MapBridge {
     _createAmap(rec, div, mode, source, cfg) {
         // 高德脚本由 index.html 按 site.config.js 里的 amapKey 按需加载；未配置时给出明确报错
         if (typeof AMap === 'undefined') {
-            throw new Error('[PulseFrame] AMap JS API 未加载：请在 site.config.js 中设置 PULSEFRAME_CONFIG.amapKey，或把该图层换成 maptalks 源');
+            throw new Error('[PulseFrame] AMap JS API not loaded: set PULSEFRAME_CONFIG.amapKey in site.config.js, or switch this layer to a maptalks source');
         }
         const zoom = this._zoomOf(mode, cfg, 16);
         rec.map = new AMap.Map(div, {

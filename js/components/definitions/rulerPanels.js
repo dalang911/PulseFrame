@@ -14,6 +14,7 @@
 
 import { go_board_strokes, go_board_black_cells } from '../../utils/icons.js';
 import { AVATAR_PRESETS } from '../../utils/images.js';
+import { t } from '../../core/i18n.js';
 
 const textshadow = { x: 2, y: 2, blur: 0, color: '#333333' };
 
@@ -107,7 +108,7 @@ const zh_distance_pan = {
 
             if (isStart) {
                 labelNodes.push({
-                    tag: 'Text', text: 'Start', resizeFontSize: true, x: nodeX, y: 10, fontSize: 12, fontWeight: 'black',
+                    tag: 'Text', text: t('Start'), resizeFontSize: true, x: nodeX, y: 10, fontSize: 12, fontWeight: 'black',
                     fill: nodeColor, origin: 'left', rotation: 45, textAlign: 'left', verticalAlign: 'middle'
                 });
                 return;

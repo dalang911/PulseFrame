@@ -14,6 +14,7 @@ import { openUnitConfigDialog } from './UnitConfigDialog.js';
 import { loadAndApplyFont } from '../core/GlobalFont.js';
 import { imageToSquareDataUrl, presetNameOf } from '../utils/images.js';
 import { syncPanelBorderWidth } from '../components/factory.js';
+import { t } from '../core/i18n.js';
 
 // 预定义颜色（与原版一致）
 export const PRESET_COLORS = [
@@ -278,14 +279,14 @@ function createRow(item, config, onChange, useNativeColor, cssPrefix) {
             status.style.cssText = 'font-size:10px; color:#999; line-height:1.4; width:100%; word-break:break-all;';
             const describe = (v) => {
                 // NONE_MARK 只是「无」格的选中态标记，不是真实值，回显按未选择处理
-                if (!v || v === NONE_MARK) return allowNone ? '未选择（使用组件默认样式）' : '未选择';
+                if (!v || v === NONE_MARK) return allowNone ? t('Not selected (uses component default style)') : t('Not selected');
                 if (v.startsWith('data:')) {
                     const kb = Math.round(v.length * 0.75 / 1024);
-                    return `已上传本地图片（内嵌 ${kb} KB）`;
+                    return t('Local image uploaded (embedded {kb} KB)', { kb });
                 }
                 const name = presetNameOf(v, presets);
-                if (name) return `预设：${name}`;
-                return `外部链接：${v.length > 40 ? v.slice(0, 40) + '…' : v}`;
+                if (name) return t('Preset: {name}', { name });
+                return t('External link: {url}', { url: v.length > 40 ? v.slice(0, 40) + '…' : v });
             };
             status.textContent = describe(current);
 
@@ -302,8 +303,8 @@ function createRow(item, config, onChange, useNativeColor, cssPrefix) {
 
             if (allowNone) {
                 const none = document.createElement('div');
-                none.textContent = '无';
-                none.title = '不使用自定义图片';
+                none.textContent = t('None');
+                none.title = t('Do not use a custom image');
                 none.style.cssText = 'width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; font-size:11px; color:#666; border:2px solid #e6e6e6; border-radius:3px; cursor:pointer; background:#fafafa;';
                 none.onclick = () => { onChange(item.key, ''); setActive(NONE_MARK); };
                 marks.push({ el: none, value: NONE_MARK });
@@ -314,13 +315,13 @@ function createRow(item, config, onChange, useNativeColor, cssPrefix) {
                 const wrap = document.createElement('div');
                 wrap.style.cssText = 'cursor:pointer; text-align:center; flex:0 0 auto;';
                 const im = document.createElement('img');
-                const label = p.name || `预设 ${idx + 1}`;
+                const label = p.name || t('Preset {n}', { n: idx + 1 });
                 im.src = p.url;
                 im.alt = label;
                 im.title = label;
                 im.draggable = false;
                 im.style.cssText = 'width:40px; height:40px; object-fit:cover; border:2px solid #e6e6e6; border-radius:3px; display:block;';
-                im.onerror = () => { im.style.opacity = .3; im.title = `${label}（图片加载失败）`; };
+                im.onerror = () => { im.style.opacity = .3; im.title = t('{label} (image failed to load)', { label }); };
                 im.onclick = () => { onChange(item.key, p.url); setActive(p.url); };
                 marks.push({ el: im, value: p.url });
                 const cap = document.createElement('div');
@@ -340,7 +341,7 @@ function createRow(item, config, onChange, useNativeColor, cssPrefix) {
             const uploadBtn = document.createElement('button');
             uploadBtn.type = 'button';
             uploadBtn.className = 'layui-btn layui-btn-xs layui-btn-normal';
-            const uploadText = item.uploadText || 'Upload image (stretched to 1:1)';
+            const uploadText = item.uploadText || t('Upload image (stretched to 1:1)');
             uploadBtn.textContent = uploadText;
             uploadBtn.style.cssText = 'height:24px; line-height:24px; padding:0 8px; font-size:11px; width:100%; margin:0;';
 
@@ -353,14 +354,14 @@ function createRow(item, config, onChange, useNativeColor, cssPrefix) {
                 fileInput.value = '';       // 先清空，允许重复选同一张
                 if (!file) return;
                 uploadBtn.disabled = true;
-                uploadBtn.textContent = '处理中…';
+                uploadBtn.textContent = t('Processing…');
                 try {
                     const dataUrl = await imageToSquareDataUrl(file, item.uploadSize || 256);
                     onChange(item.key, dataUrl);
                     setActive('');          // 自定义图不在预设里，取消所有高亮
-                    status.textContent = describe(dataUrl) + ` · 源文件 ${file.name}`;
+                    status.textContent = describe(dataUrl) + t(' · Source file {name}', { name: file.name });
                 } catch (err) {
-                    status.textContent = '上传失败：' + (err && err.message ? err.message : err);
+                    status.textContent = t('Upload failed: {msg}', { msg: t(err && err.message ? err.message : String(err)) });
                     status.style.color = '#d93025';
                 } finally {
                     uploadBtn.disabled = false;
@@ -404,12 +405,14 @@ function createRow(item, config, onChange, useNativeColor, cssPrefix) {
                 loadGoogleFont(fontInput.value);
             };
             inputDiv.appendChild(fontRow);
-            // 预设字体按钮组
+            // 预设字体按钮组（字体名是数据不是文案：整组跳过 DOM 翻译，
+            // 否则名为 'Play' 的字体会被当成播放按钮译成「播放」；Default 按钮单独走 t()）
             const btnGroup = document.createElement('div');
+            btnGroup.dataset.i18nSkip = '1';
             btnGroup.style.cssText = 'display:flex; flex-wrap:wrap; gap:3px; width:100%;';
             presetFonts.forEach(pf => {
                 const btn = document.createElement('button');
-                btn.textContent = pf.name;
+                btn.textContent = pf.value === '' ? t('Default') : pf.name;
                 btn.className = 'layui-btn layui-btn-xs layui-btn-primary';
                 btn.style.cssText = 'height:22px; line-height:22px; padding:0 6px; font-size:10px;';
                 btn.onclick = () => {

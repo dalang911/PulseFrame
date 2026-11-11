@@ -23,6 +23,7 @@ import {
     weatherText,
     FONT_WEIGHT_OPTIONS
 } from './weatherCommon.js';
+import { t } from '../../core/i18n.js';
 
 const WIDE = {
     width: 560,
@@ -133,7 +134,7 @@ export const el_weather_wide_pan = {
     ],
     build(config) {
         const cfg = config || {};
-        const conditionLabel = WEATHER_LABELS[str(cfg.weatherIcon, 'sunny')] || WEATHER_LABELS.sunny;
+        const conditionLabel = t(WEATHER_LABELS[str(cfg.weatherIcon, 'sunny')] || WEATHER_LABELS.sunny);
         const children = [
             weatherBackground({
                 name: 'bg', width: WIDE.width, height: WIDE.height, config: cfg,

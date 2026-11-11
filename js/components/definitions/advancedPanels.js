@@ -9,6 +9,7 @@
  */
 
 import { o2o_bg, mountain_icon, heart_icon } from '../../utils/icons.js';
+import { t } from '../../core/i18n.js';
 
 const textshadow = { x: 2, y: 2, blur: 0, color: '#333333' };
 
@@ -60,7 +61,7 @@ const x_distance_pan = {
         return [
             { tag: 'Ellipse', width: 20, height: 20, x: 58, y: 10, around: 'center', fill: textColor },
             {
-                tag: 'Text', text: 'start', resizeFontSize: true, x: 50, y: 20, fontSize: 20, fontWeight: 'black',
+                tag: 'Text', text: t('start'), resizeFontSize: true, x: 50, y: 20, fontSize: 20, fontWeight: 'black',
                 fill: textColor, origin: 'center', rotation: 10, textAlign: 'center', verticalAlign: 'top', shadow: textshadow
             },
             { tag: 'Ellipse', width: 20, height: 20, x: 500, y: 50, around: 'center', fill: barBg },
