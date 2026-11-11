@@ -49,41 +49,39 @@
 </head>
 
 <body>
-    <!-- ===== 顶部导航 ===== -->
-    <div class="layui-nav">
-        <li class="layui-nav-item nav-brand" style="margin-right: 30px; font-size: 22px;" title="PulseFrame · Sports Data Overlay Studio · No client · In-browser · One frame per second · Open component platform">
-            PulseFrame
-        </li>
-        <li class="layui-nav-item nav-brand" style="margin-right: 30px; font-size: 20px;" title="Slogan">“Your effort, framed.” </li>
-        <li class="layui-nav-item nav-brand" style="margin-right: 30px; font-size: 16px;" title="">
-            v2.0 · Updated: Native / Local / Shared three panels; progress bar scales with container;
-        </li>
+    <!-- ===== 顶部导航（定高 40px：flex 左品牌 / 右动作，任何屏宽不重叠、不换行；更新说明收进版本 chip 悬停） ===== -->
+    <div class="layui-nav topnav">
+        <div class="nav-left">
+            <span class="nav-logo" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                    <defs>
+                        <linearGradient id="navPulseGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0" stop-color="#1E9FFF" />
+                            <stop offset="1" stop-color="#00C9A7" />
+                        </linearGradient>
+                    </defs>
+                    <path d="M2 12h4l2.5-6 4 12 2.5-6H22" stroke="url(#navPulseGrad)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+            </span>
+            <span class="nav-brand" title="PulseFrame · Sports Data Overlay Studio · No client · In-browser · One frame per second · Open component platform">PulseFrame</span>
+            <span class="nav-slogan" title="Slogan">“Your effort, framed.”</span>
+            <span class="nav-version" title="v2.0 · Updated: Native / Local / Shared three panels; progress bar scales with container;">v2.0</span>
+        </div>
 
-        <div class="ws-header-menu">
-            <li class="layui-nav-item" style="position: absolute; right: 350px; top: 0;">
-                <span class="lang-switch" id="langSwitch" role="group" aria-label="Language">
-                    <button type="button" data-lang="en" title="English">EN</button>
-                    <button type="button" data-lang="zh" title="Switch to Simplified Chinese">中</button>
-                </span>
-            </li>
-            <li class="layui-nav-item" style="position: absolute; right: 240px; top: 0;">
-                <button class="layui-btn layui-btn-xs layui-btn-normal" id="generateVideoBtn">Generate Video</button>
-            </li>
-            <li class="layui-nav-item" style="position: absolute; right: 100px; top: 0;">
-                <a href="./studio/" target="_blank" title="PulseFrame Studio — build reusable dashboard components">
-                    <button class="layui-btn layui-btn-xs layui-btn-warm">Studio</button>
-                </a>
-            </li>
-            <li class="layui-nav-item" style="position: absolute; right: 50px; top: 0; color: #000; text-align: center;">
-                <a href="https://www.bilibili.com/video/BV1m9fEYRE6u/" target="_blank">
-                    <i class="layui-icon layui-icon-read" style="font-size: 18px; color: #000;"></i>
-                </a>
-            </li>
-            <li class="layui-nav-item" style="position: absolute; right: 10px; top: 0; color: #000; text-align: center;">
-                <a href="https://github.com/dalang911/PulseFrame" target="_blank">
-                    <i class="layui-icon layui-icon-github" style="font-size: 18px; color: #000;"></i>
-                </a>
-            </li>
+        <div class="nav-right">
+            <span class="lang-switch" id="langSwitch" role="group" aria-label="Language">
+                <button type="button" data-lang="en" title="English">EN</button>
+                <button type="button" data-lang="zh" title="Switch to Simplified Chinese">中</button>
+            </span>
+            <button type="button" class="nav-cta" id="generateVideoBtn">Generate Video</button>
+            <a class="nav-studio" href="./studio/" target="_blank" rel="noopener noreferrer" title="PulseFrame Studio — build reusable dashboard components">Studio</a>
+            <span class="nav-sep" aria-hidden="true"></span>
+            <a class="nav-icon" href="https://www.bilibili.com/video/BV1m9fEYRE6u/" target="_blank" rel="noopener noreferrer" title="Watch the intro video on Bilibili">
+                <i class="layui-icon layui-icon-read" aria-hidden="true"></i>
+            </a>
+            <a class="nav-icon" href="https://github.com/dalang911/PulseFrame" target="_blank" rel="noopener noreferrer" title="View source on GitHub">
+                <i class="layui-icon layui-icon-github" aria-hidden="true"></i>
+            </a>
         </div>
     </div>
 

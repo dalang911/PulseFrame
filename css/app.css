@@ -57,73 +57,170 @@ html, body {
     position: relative;
 }
 
-/* ===== 顶部导航 ===== */
-.layui-nav {
+/* ===== 顶部导航（定高 40px，与 .layui-container 的 calc(100% - 40px) 对应） ===== */
+/* flex 左品牌 / 右动作取代旧版 absolute right 偏移：任何屏宽不重叠、不换行。
+   注意 layui 默认 `.layui-nav *{font-size:14px}`：所有文字规则都要带 .topnav 前缀压过它。 */
+.layui-nav.topnav {
     position: relative;
-    padding: 0 15px;
-    background-color: #ffffff;
-    color: #000000;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    height: 40px;
+    padding: 0 12px 0 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #f6f9fc 100%);
+    border-bottom: 1px solid #e2e8f1;
+    border-radius: 0;
+    box-shadow: 0 1px 3px rgba(20, 40, 80, .05);
+    color: #1a2433;
     font-size: 0;
     box-sizing: border-box;
 }
 
-.layui-nav .layui-nav-item {
-    position: relative;
-    display: inline-block;
-    margin-top: 0;
-    list-style: none;
-    vertical-align: middle;
-    line-height: 40px;
+.topnav .nav-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
 }
 
-/* ===== 顶部品牌（PulseFrame 脉搏帧帧）===== */
-/* 注：.layui-nav 是 font-size:0，所以每个文字项都必须自己声明字号 */
-.layui-nav .nav-brand {
+.topnav .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.topnav .nav-logo {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* 字标用页面已加载的 Sofadi One（只有 400 字重，靠字号/字距撑品牌感；CDN 失败回退系统字体） */
+.topnav .nav-brand {
+    font-family: 'Sofadi One', 'Helvetica Neue', Helvetica, 'PingFang SC', sans-serif;
+    font-size: 18px;
+    letter-spacing: .5px;
+    color: #16233a;
     white-space: nowrap;
+    cursor: default;
 }
 
-/* 副标题（Slogan）：任何屏宽都保留 */
-.layui-nav .nav-slogan {
-    margin-right: 20px;
-    font-size: 13px;
-    font-style: italic;
-    color: rgba(255, 255, 255, .85);
-    white-space: nowrap;
-}
-
-/* 更新提示（版本号 + 本版改动） */
-.layui-nav .nav-sub {
+.topnav .nav-slogan {
     font-size: 12px;
-    color: rgba(255, 255, 255, .78);
-    letter-spacing: .3px;
+    font-style: italic;
+    color: #8a94a6;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* 能力口号 */
-.layui-nav .nav-tag {
+/* 版本 chip：完整更新说明在 title 悬停里（i18n walker 会翻译 title） */
+.topnav .nav-version {
+    flex-shrink: 0;
+    padding: 0 8px;
     font-size: 11px;
-    color: rgba(255, 255, 255, .62);
+    line-height: 18px;
+    border-radius: 9px;
+    background-color: #eef4fb;
+    color: #5b7ba6;
     white-space: nowrap;
+    cursor: help;
 }
 
-/* 右侧按钮组为绝对定位（最近的一个在 right:350px）：窄屏逐级折叠附加文字，品牌与副标题始终保留 */
-@media (max-width: 1280px) {
-    .layui-nav .nav-tag { display: none; }
+/* 主行动按钮：蓝→青渐变，与品牌 pulse 标识同一色谱 */
+.topnav .nav-cta {
+    height: 26px;
+    padding: 0 14px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .3px;
+    color: #fff;
+    background: linear-gradient(90deg, #1e9fff 0%, #00b8d4 100%);
+    box-shadow: 0 1px 3px rgba(30, 159, 255, .35);
+    cursor: pointer;
+    transition: filter .15s, box-shadow .15s, transform .15s;
 }
 
-@media (max-width: 1050px) {
-    .layui-nav .nav-sub { display: none; }
+.topnav .nav-cta:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 2px 6px rgba(30, 159, 255, .45);
+}
+
+.topnav .nav-cta:active {
+    transform: translateY(1px);
+}
+
+/* Studio：暖琥珀描边（沿用旧 layui-btn-warm 的暖色身份），与主 CTA 拉开层级 */
+.topnav .nav-studio {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 12px;
+    border: 1px solid #f0b429;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #b07809;
+    background-color: #fffaf0;
+    text-decoration: none;
+    transition: background-color .15s, color .15s;
+}
+
+.topnav .nav-studio:hover {
+    background-color: #fff3d6;
+    color: #8a5d05;
+    text-decoration: none;
+}
+
+.topnav .nav-sep {
+    width: 1px;
+    height: 18px;
+    background-color: #dde4ee;
+}
+
+.topnav .nav-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: #6b7686;
+    transition: background-color .15s, color .15s;
+}
+
+.topnav .nav-icon:hover {
+    background-color: #eaf3fc;
+    color: #1e9fff;
+}
+
+.topnav .nav-icon .layui-icon {
+    font-size: 17px;
+    color: inherit;
+}
+
+/* 窄屏逐级收起附加文字：先 slogan 后版本 chip；品牌与全部控件始终可见、不重叠 */
+@media (max-width: 1100px) {
+    .topnav .nav-slogan { display: none; }
+}
+
+@media (max-width: 900px) {
+    .topnav .nav-version { display: none; }
 }
 
 /* ===== 语言切换（EN / 中）===== */
-/* .layui-nav 是 font-size:0，按钮必须自带字号；整组垂直居中于 40px 导航 */
 .lang-switch {
     display: inline-flex;
     align-items: stretch;
-    height: 22px;
-    vertical-align: middle;
-    border: 1px solid #d2d2d2;
-    border-radius: 3px;
+    height: 24px;
+    border: 1px solid #d8e0ea;
+    border-radius: 4px;
     overflow: hidden;
     background-color: #fff;
 }
@@ -133,13 +230,13 @@ html, body {
     border: none;
     background: transparent;
     font-size: 12px;
-    line-height: 20px;
+    line-height: 22px;
     color: #555;
     cursor: pointer;
 }
 
 .lang-switch button + button {
-    border-left: 1px solid #d2d2d2;
+    border-left: 1px solid #d8e0ea;
 }
 
 .lang-switch button:hover {
