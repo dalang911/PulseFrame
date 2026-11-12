@@ -168,6 +168,7 @@ TT.app = (function () {
         if (iss.noCoord) H.push(item('bad', '无坐标数据（室内活动）'));
         else if (iss.badCoord > 0) H.push(item('warn', iss.badCoord + ' 个坐标无效或缺失'));
         else H.push(item('ok', '坐标齐全'));
+        if (iss.noFix > 0) H.push(item('ok', '含 ' + iss.noFix + ' 个暂停/无定位点（设备正常记录，已保留）'));
         H.push(iss.ele ? item('ok', '含海拔') : item('warn', '无海拔'));
         H.push(iss.hr ? item('ok', '含心率') : item('warn', '无心率'));
         H.push(iss.cad ? item('ok', '含步频') : item('warn', '无步频'));

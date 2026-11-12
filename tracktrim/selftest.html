@@ -208,6 +208,22 @@
     const repB = M.repair(badRaw, M.defaultSettings(badRaw, M.detectIssues(badRaw)));
     ok(repB.points.length === 18, '剔除 2 个无效坐标点');
 
+    // 暂停/无定位点（经纬度同时缺失，设备暂停哨兵）属正常数据：不计坏坐标、修复保留
+    const pauseRaw = synth(20);
+    pauseRaw.points[5].lat = null; pauseRaw.points[5].lon = null;
+    pauseRaw.points[6].lat = null; pauseRaw.points[6].lon = null;
+    const issP = M.detectIssues(pauseRaw);
+    ok(issP.badCoord === 0 && issP.noFix === 2, '暂停点不计入坏坐标（noFix=2）');
+    const repP = M.repair(pauseRaw, M.defaultSettings(pauseRaw, issP));
+    ok(repP.points.length === 20 && repP.points[5].lat == null, '暂停点修复后保留（不剔除）');
+    const mixRaw = synth(20);
+    mixRaw.points[5].lat = null; mixRaw.points[5].lon = null; // 暂停
+    mixRaw.points[8].lat = 999; // 越界（真坏）
+    const issX = M.detectIssues(mixRaw);
+    ok(issX.badCoord === 1 && issX.noFix === 1, '混合：坏坐标与暂停点分开计数');
+    const repX = M.repair(mixRaw, M.defaultSettings(mixRaw, issX));
+    ok(repX.points.length === 19 && repX.points.some(p => p.lat == null && p.lon == null), '混合：剔除坏坐标但保留暂停点');
+
     const indoor = synth(40, { noCoord: true });
     const repI = M.repair(indoor, M.defaultSettings(indoor, M.detectIssues(indoor)));
     ok(repI.indoor === true, '识别室内活动（无坐标）');

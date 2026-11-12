@@ -28,7 +28,6 @@ TT.model = (function () {
         for (const p of pts) {
             if (p.t != null) anyTime = true; else allTime = false;
             if (validCoord(p)) anyCoord = true;
-            else if (p.lat != null || p.lon != null || anyCoord) badCoord++;
             if (p.ele != null) ele = true;
             if (p.hr != null) hr = true;
             if (p.cad != null) cad = true;
@@ -37,9 +36,14 @@ TT.model = (function () {
             if (p.speed != null) speed = true;
             if (p.dist != null) dist = true;
         }
-        // 重新精确统计无效坐标（有坐标的轨迹里，缺失/越界/ Null Island 的点）
+        // 区分真正坏坐标（越界 / Null Island / 经纬度只缺一个）与暂停/无定位点：
+        // 经纬度同时缺失是设备暂停时正常写入的无效哨兵，属有效数据，应保留而非剔除
         badCoord = 0;
-        if (anyCoord) for (const p of pts) if (!validCoord(p)) badCoord++;
+        let noFix = 0;
+        if (anyCoord) for (const p of pts) {
+            if (validCoord(p)) continue;
+            if (p.lat == null && p.lon == null) noFix++; else badCoord++;
+        }
         let dup = 0, unordered = 0, prev = null;
         const seen = new Set();
         for (const p of pts) {
@@ -50,7 +54,7 @@ TT.model = (function () {
         }
         return {
             n: pts.length, anyTime, allTime, noTime: !anyTime,
-            anyCoord, noCoord: !anyCoord, badCoord,
+            anyCoord, noCoord: !anyCoord, badCoord, noFix,
             ele, hr, cad, power, temp, speed, dist,
             dup, unordered, interval: medianInterval(pts),
             created: raw.meta && raw.meta.created != null ? raw.meta.created : null
@@ -105,7 +109,7 @@ TT.model = (function () {
         const indoor = issues.noCoord;
 
         if (!indoor && s.dropBadCoord && issues.badCoord > 0) {
-            pts = pts.filter(validCoord);
+            pts = pts.filter(p => validCoord(p) || (p.lat == null && p.lon == null));
             report.push('剔除 ' + issues.badCoord + ' 个无效/缺失坐标点');
         }
 
