@@ -50,6 +50,8 @@
 }
 
 * { box-sizing: border-box; }
+/* hidden 属性必须压过组件自身的 display（.modal/.workspace 用了 grid），否则弹窗关不掉、空工作区会提前露出 */
+[hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 body {
   font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
