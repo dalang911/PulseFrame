@@ -9,12 +9,23 @@ TT.fit = TT.fit || {};
 
     const INVALID = { 0x00: 0xFF, 0x01: 0x7F, 0x02: 0xFF, 0x83: 0x7FFF, 0x84: 0xFFFF, 0x85: 0x7FFFFFFF, 0x86: 0xFFFFFFFF, 0x0A: 0, 0x0C: 0 };
 
+    // 导出文件的厂商标识：标注为本工具，而非沿用源设备。
+    // manufacturer 255 是 FIT 预留的 development（未注册厂商）；可见品牌写在 product_name 字符串里。
+    const BRAND = { manufacturer: 255, product: 1, name: 'TrackTrim' };
+
     function Bytes() { this.a = []; }
     Bytes.prototype.u8 = function (v) { this.a.push(v & 0xFF); };
     Bytes.prototype.u16 = function (v) { this.a.push(v & 0xFF, (v >> 8) & 0xFF); };
     Bytes.prototype.u32 = function (v) { this.a.push(v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF); };
     Bytes.prototype.i8 = function (v) { this.u8(v); };
     Bytes.prototype.i32 = function (v) { this.u32(v); };
+    // FIT 字符串：UTF-8、null 终止、补零到定长 size
+    Bytes.prototype.str = function (s, size) {
+        const bytes = new TextEncoder().encode(String(s == null ? '' : s));
+        const n = Math.min(bytes.length, size - 1);
+        for (let i = 0; i < n; i++) this.a.push(bytes[i]);
+        for (let i = n; i < size; i++) this.a.push(0);
+    };
 
     function writeVal(b, type, v) {
         if (v == null || !isFinite(v)) v = INVALID[type] != null ? INVALID[type] : 0xFF;
@@ -69,7 +80,10 @@ TT.fit = TT.fit || {};
         function row(local, values) {
             b.u8(local);
             const fields = defined[local];
-            for (let i = 0; i < fields.length; i++) writeVal(b, fields[i][2], values[i]);
+            for (let i = 0; i < fields.length; i++) {
+                if (fields[i][2] === 0x07) b.str(values[i], fields[i][1]);
+                else writeVal(b, fields[i][2], values[i]);
+            }
         }
         function msg(local, globalNum, fields, values) {
             if (!defined[local]) def(local, globalNum, fields);
@@ -78,8 +92,8 @@ TT.fit = TT.fit || {};
 
         const first = points[0], last = points[points.length - 1];
 
-        msg(0, 0, [[0, 1, 0x00], [1, 2, 0x84], [2, 2, 0x84], [3, 4, 0x0C], [4, 4, 0x86]],
-            [4, 255, 0, 1, fitTime(first.t)]);
+        msg(0, 0, [[0, 1, 0x00], [1, 2, 0x84], [2, 2, 0x84], [3, 4, 0x0C], [4, 4, 0x86], [8, 20, 0x07]],
+            [4, BRAND.manufacturer, BRAND.product, 1, fitTime(first.t), BRAND.name]);
 
         const EV = [[253, 4, 0x86], [0, 1, 0x00], [1, 1, 0x00]];
         const timerEvent = (t, type) => msg(1, 21, EV, [fitTime(t), 0, type]);
@@ -156,4 +170,5 @@ TT.fit = TT.fit || {};
     }
 
     TT.fit.write = write;
+    TT.fit.BRAND = BRAND;
 })();

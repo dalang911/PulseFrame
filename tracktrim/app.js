@@ -60,6 +60,7 @@ TT.app = (function () {
         $('workspace').hidden = false;
         $('inspectBar').hidden = true;
         rebuild();
+        map.resetView();
     }
 
     async function loadFile(file) {
@@ -345,7 +346,19 @@ TT.app = (function () {
                 toast('已标记删除片段，可在下方撤销');
             }
         });
-        map = new TT.charts.TrackMap($('mapCanvas'), { onInspect: idx => setInspect(idx) });
+        map = new TT.charts.TrackMap($('mapCanvas'), {
+            onInspect: idx => setInspect(idx),
+            onView: z => {
+                $('mapZoom').textContent = Math.round(z * 100) + '%';
+                $('mapZoomIn').disabled = z >= TT.charts.ZOOM_MAX - 1e-6;
+                $('mapZoomOut').disabled = z <= TT.charts.ZOOM_MIN + 1e-6;
+            }
+        });
+        $('mapZoomIn').addEventListener('click', () => map.zoomBy(1.4));
+        $('mapZoomOut').addEventListener('click', () => map.zoomBy(1 / 1.4));
+        $('mapFit').addEventListener('click', () => map.resetView());
+        $('mapZoomSel').addEventListener('click', () => map.zoomToSelection());
+        $('fitBrand').textContent = TT.fit.BRAND.name;
 
         segBind('modeSeg', v => { state.mode = v; profile.setMode(v); });
         segBind('xModeSeg', v => { state.xMode = v; profile.setXMode(v); updateRangeInputs(); renderCutChips(); });

@@ -23,6 +23,7 @@
 <script src="model.js"></script>
 <script src="fitwrite.js"></script>
 <script src="gpxwrite.js"></script>
+<script src="charts.js"></script>
 <script>
 (function () {
     const U = TT.util, M = TT.model;
@@ -119,6 +120,12 @@
     ok(maxEle <= 0.2, 'FIT 往返海拔 ≤ 0.2m');
     ok(maxDist <= 0.01, 'FIT 往返距离 ≤ 0.01m');
     ok(maxSpd <= 0.001, 'FIT 往返速度 ≤ 0.001m/s');
+
+    grp('FIT 厂商标识（写入本工具品牌）');
+    ok(back.meta.manufacturer === 255, 'FIT 厂商 = development 255');
+    ok(back.meta.product === 1, 'FIT 产品号 = 1');
+    ok(back.meta.productName === 'TrackTrim', 'FIT 产品名 = TrackTrim（file_id field 8 字符串往返）');
+    ok(TT.fit.BRAND.name === 'TrackTrim', '品牌常量 TT.fit.BRAND.name');
 
     grp('FIT 缺测字段 / 压缩时间戳');
     const rawH = synth(50, { noHr: true, noEle: true });
@@ -232,6 +239,7 @@
     ok(selI.points[0].dist === 0 && selI.points[1].dist === 3, '室内：保留源距离增量');
     const fitI = TT.fit.read(TT.fit.write(selI.points, selI.segments, { sport: 'generic' }), 'i');
     ok(fitI.points.length === 35 && fitI.points.every(p => p.lat == null), '室内 FIT 导出（无坐标）');
+    ok(fitI.meta.productName === 'TrackTrim', '室内 FIT 同样标注厂商 TrackTrim');
 
     grp('统计');
     const eleRaw = { name: 'e', format: 'T', sport: 'generic', points: [], meta: {} };
@@ -242,6 +250,44 @@
     near(stE.gain, 30, 0.01, '爬升 0→10→20→(15)→25 = 30m');
     near(stE.loss, 5, 0.01, '下降 20→15 = 5m');
     ok(stE.maxHr === 160 && stE.avgHr === 140, '心率统计 max160 avg140');
+
+    grp('轨迹形状图：缩放 / 平移 / 定位');
+    (function () {
+        const cv = document.createElement('canvas');
+        cv.style.width = '400px'; cv.style.height = '300px';
+        document.body.appendChild(cv);
+        let inspected = -1;
+        const tm = new TT.charts.TrackMap(cv, { onInspect: i => { inspected = i; } });
+        const mraw = synth(300);
+        const mp = M.repair(mraw, M.defaultSettings(mraw, M.detectIssues(mraw))).points;
+        tm.setData(mp);
+        tm.setSelection({ start: 0, end: 299, cuts: [] });
+        const spread = () => { const a = tm.pts[0], b = tm.pts[299]; return Math.hypot(a.x - b.x, a.y - b.y); };
+        const d1 = spread();
+        ok(tm.zoom === 1 && d1 > 50, '初始适应窗口（zoom=1，展开 ' + Math.round(d1) + 'px）');
+        ok(tm.pts.every(q => !q || (q.x >= -1 && q.x <= 401 && q.y >= -1 && q.y <= 301)), '适应窗口：全部点落在画布内');
+        tm.zoomBy(2);
+        near(spread(), d1 * 2, 1, '放大 2×：点间距翻倍');
+        ok(tm.zoom === 2, 'zoom 读数 = 2');
+        const x0 = tm.pts[0].x;
+        tm.panX += 50; tm.draw();
+        near(tm.pts[0].x - x0, 50, 0.01, '平移 +50px：屏幕坐标随动');
+        tm.resetView();
+        near(spread(), d1, 0.5, '重置：回到适应窗口');
+        ok(tm.zoom === 1 && tm.panX === 0 && tm.panY === 0, '重置：zoom=1 / pan=0');
+        tm.setSelection({ start: 100, end: 199, cuts: [] });
+        tm.zoomToSelection();
+        ok(tm.zoom > 1, '放大到选区：zoom>1（' + tm.zoom.toFixed(2) + '）');
+        const a = tm.pts[100], b = tm.pts[199];
+        ok(Math.hypot(a.x - b.x, a.y - b.y) > d1 * 0.8, '选区展开占据画布主体');
+        tm.resetView(); tm.setSelection({ start: 0, end: 299, cuts: [] });
+        const q = tm.pts[50];
+        tm._inspectAt(q.x, q.y);
+        ok(inspected === 50, '点击最近点 → 定位 #50');
+        tm.zoomBy(1000); ok(tm.zoom === TT.charts.ZOOM_MAX, '放大上限 ' + TT.charts.ZOOM_MAX + '×');
+        tm.zoomBy(0.0001); ok(tm.zoom === TT.charts.ZOOM_MIN, '缩小下限 ' + TT.charts.ZOOM_MIN + '×（适应）');
+        document.body.removeChild(cv);
+    })();
 
     const sum = document.getElementById('summary');
     sum.textContent = pass + ' 通过 / ' + fail + ' 失败';

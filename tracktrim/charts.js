@@ -311,41 +311,181 @@ TT.charts = (function () {
         }
     };
 
-    /* ---------------- 轨迹形状图 ---------------- */
+    /* ---------------- 轨迹形状图（缩放 / 平移 / 定位） ---------------- */
+    const MIN_ZOOM = 1, MAX_ZOOM = 80;
     function TrackMap(canvas, cb) {
         this.cv = canvas; this.cb = cb || {};
         this.points = []; this.sel = { start: 0, end: 0, cuts: [] }; this.inspect = -1;
+        this.zoom = 1; this.panX = 0; this.panY = 0;
+        this._proj = null; this._ptrs = new Map(); this._drag = null; this._pinch = null;
         new ResizeObserver(() => this.draw()).observe(canvas);
-        canvas.addEventListener('click', e => {
-            if (!this.pts || !this.pts.length) return;
-            const r = canvas.getBoundingClientRect();
-            const x = e.clientX - r.left, y = e.clientY - r.top;
-            let best = -1, bd = 1e9;
-            for (let i = 0; i < this.pts.length; i++) {
-                const q = this.pts[i]; if (!q) continue;
-                const d = (q.x - x) ** 2 + (q.y - y) ** 2;
-                if (d < bd) { bd = d; best = i; }
-            }
-            if (best >= 0 && bd < 40 * 40 && this.cb.onInspect) this.cb.onInspect(best);
-        });
+        this._bind();
     }
     TrackMap.prototype.setData = function (points) { this.points = points; this.draw(); };
     TrackMap.prototype.setSelection = function (sel) { this.sel = sel; this.draw(); };
     TrackMap.prototype.setInspect = function (i) { this.inspect = i; this.draw(); };
+    TrackMap.prototype.getZoom = function () { return this.zoom; };
+    TrackMap.prototype._size = function () {
+        const r = this.cv.getBoundingClientRect();
+        return { w: Math.max(10, r.width), h: Math.max(10, r.height) };
+    };
+    TrackMap.prototype._emitView = function () { if (this.cb.onView) this.cb.onView(this.zoom); };
+    TrackMap.prototype.resetView = function () {
+        this.zoom = 1; this.panX = 0; this.panY = 0; this._emitView(); this.draw();
+    };
+    // 缩放到 z1，保持画布上 (ax,ay) 处的世界点不动（默认锚定中心）
+    TrackMap.prototype._zoomTo = function (z1, ax, ay) {
+        const { w, h } = this._size();
+        if (ax == null) { ax = w / 2; ay = h / 2; }
+        const z0 = this.zoom;
+        z1 = U.clamp(z1, MIN_ZOOM, MAX_ZOOM);
+        if (z1 === z0) return;
+        const ratio = z1 / z0;
+        this.panX = (ax - w / 2) * (1 - ratio) + this.panX * ratio;
+        this.panY = (ay - h / 2) * (1 - ratio) + this.panY * ratio;
+        this.zoom = z1;
+        this._emitView(); this.draw();
+    };
+    TrackMap.prototype.zoomBy = function (factor, ax, ay) { this._zoomTo(this.zoom * factor, ax, ay); };
+    TrackMap.prototype._baseXY = function (p) {
+        const pr = this._proj;
+        return { x: pr.ox + (p.lon - pr.minLon) * pr.cosLat * pr.s, y: pr.h - pr.oy - (p.lat - pr.minLat) * pr.s };
+    };
+    // 把当前保留选区铺满画布
+    TrackMap.prototype.zoomToSelection = function () {
+        if (!this._proj) this.draw();
+        if (!this._proj) { this.resetView(); return; }
+        const { w, h } = this._size();
+        const inCut = i => this.sel.cuts.some(c => i >= c.s && i <= c.e);
+        const kept = [];
+        this.points.forEach((p, i) => {
+            if (i >= this.sel.start && i <= this.sel.end && !inCut(i) && TT.model.validCoord(p)) kept.push(p);
+        });
+        if (kept.length < 2) { this.resetView(); return; }
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const p of kept) {
+            const b = this._baseXY(p);
+            minX = Math.min(minX, b.x); maxX = Math.max(maxX, b.x);
+            minY = Math.min(minY, b.y); maxY = Math.max(maxY, b.y);
+        }
+        const pad = 40;
+        const z = U.clamp(Math.min((w - pad * 2) / Math.max(1e-6, maxX - minX), (h - pad * 2) / Math.max(1e-6, maxY - minY)), MIN_ZOOM, MAX_ZOOM);
+        const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+        this.zoom = z; this.panX = -(cx - w / 2) * z; this.panY = -(cy - h / 2) * z;
+        this._emitView(); this.draw();
+    };
+    TrackMap.prototype._inspectAt = function (x, y) {
+        let best = -1, bd = 1e9;
+        for (let i = 0; i < this.pts.length; i++) {
+            const q = this.pts[i]; if (!q) continue;
+            const d = (q.x - x) ** 2 + (q.y - y) ** 2;
+            if (d < bd) { bd = d; best = i; }
+        }
+        if (best >= 0 && bd < 40 * 40 && this.cb.onInspect) this.cb.onInspect(best);
+    };
+
+    TrackMap.prototype._bind = function () {
+        const cv = this.cv;
+        const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+        cv.addEventListener('pointerdown', e => {
+            if (!this.pts || !this.pts.length) return;
+            try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+            const p = pos(e);
+            this._ptrs.set(e.pointerId, p);
+            if (this._ptrs.size === 1) {
+                this._drag = { x0: p.x, y0: p.y, panX0: this.panX, panY0: this.panY, moved: false };
+                cv.style.cursor = 'grabbing';
+            } else if (this._ptrs.size === 2) {
+                const [a, b] = [...this._ptrs.values()];
+                this._pinch = {
+                    dist: Math.hypot(a.x - b.x, a.y - b.y),
+                    mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+                    zoom0: this.zoom, panX0: this.panX, panY0: this.panY
+                };
+                this._drag = null;
+            }
+            e.preventDefault();
+        });
+        cv.addEventListener('pointermove', e => {
+            if (!this._ptrs.has(e.pointerId)) return;
+            const p = pos(e);
+            this._ptrs.set(e.pointerId, p);
+            if (this._pinch && this._ptrs.size >= 2) {
+                const [a, b] = [...this._ptrs.values()];
+                const dist = Math.hypot(a.x - b.x, a.y - b.y);
+                const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+                const { w, h } = this._size();
+                const z1 = U.clamp(this._pinch.zoom0 * (dist / Math.max(1e-6, this._pinch.dist)), MIN_ZOOM, MAX_ZOOM);
+                const ratio = z1 / this._pinch.zoom0, m0 = this._pinch.mid;
+                this.panX = (m0.x - w / 2) * (1 - ratio) + this._pinch.panX0 * ratio + (mid.x - m0.x);
+                this.panY = (m0.y - h / 2) * (1 - ratio) + this._pinch.panY0 * ratio + (mid.y - m0.y);
+                this.zoom = z1;
+                this._emitView(); this.draw();
+            } else if (this._drag) {
+                const dx = p.x - this._drag.x0, dy = p.y - this._drag.y0;
+                if (Math.abs(dx) + Math.abs(dy) > 3) this._drag.moved = true;
+                this.panX = this._drag.panX0 + dx; this.panY = this._drag.panY0 + dy;
+                this.draw();
+            }
+        });
+        const up = e => {
+            if (!this._ptrs.has(e.pointerId)) return;
+            const p = pos(e);
+            this._ptrs.delete(e.pointerId);
+            if (this._ptrs.size < 2) this._pinch = null;
+            if (this._ptrs.size === 0) {
+                cv.style.cursor = 'grab';
+                const d = this._drag; this._drag = null;
+                if (d && !d.moved) this._inspectAt(p.x, p.y);
+            } else if (this._ptrs.size === 1) {
+                const [rem] = [...this._ptrs.values()];
+                this._drag = { x0: rem.x, y0: rem.y, panX0: this.panX, panY0: this.panY, moved: true };
+            }
+        };
+        cv.addEventListener('pointerup', up);
+        cv.addEventListener('pointercancel', up);
+        cv.addEventListener('wheel', e => {
+            if (!this.pts || !this.pts.length) return;
+            e.preventDefault();
+            const p = pos(e);
+            this.zoomBy(Math.exp(-e.deltaY * 0.0015), p.x, p.y);
+        }, { passive: false });
+        cv.addEventListener('dblclick', e => {
+            if (!this.pts || !this.pts.length) return;
+            const p = pos(e);
+            this.zoomBy(e.shiftKey ? 1 / 1.8 : 1.8, p.x, p.y);
+            e.preventDefault();
+        });
+        cv.addEventListener('keydown', e => {
+            if (!this.pts || !this.pts.length) return;
+            const step = 40;
+            switch (e.key) {
+                case '+': case '=': this.zoomBy(1.4); e.preventDefault(); break;
+                case '-': case '_': this.zoomBy(1 / 1.4); e.preventDefault(); break;
+                case '0': this.resetView(); e.preventDefault(); break;
+                case 'ArrowLeft': this.panX += step; this.draw(); e.preventDefault(); break;
+                case 'ArrowRight': this.panX -= step; this.draw(); e.preventDefault(); break;
+                case 'ArrowUp': this.panY += step; this.draw(); e.preventDefault(); break;
+                case 'ArrowDown': this.panY -= step; this.draw(); e.preventDefault(); break;
+            }
+        });
+    };
 
     TrackMap.prototype.draw = function () {
         const { ctx, w, h } = setupCanvas(this.cv);
         const T = theme();
         ctx.clearRect(0, 0, w, h);
         ctx.fillStyle = T.paper; ctx.fillRect(0, 0, w, h);
-        // 点状背景
+        // 点状背景：随平移做视差，缩放时间距恒定（坐标纸质感）
         ctx.fillStyle = T.grid;
-        for (let x = 12; x < w; x += 22) for (let y = 12; y < h; y += 22) { ctx.fillRect(x, y, 1, 1); }
+        const gx = ((this.panX % 22) + 22) % 22, gy = ((this.panY % 22) + 22) % 22;
+        for (let x = gx; x < w; x += 22) for (let y = gy; y < h; y += 22) { ctx.fillRect(x, y, 1, 1); }
 
         const valid = [];
         this.points.forEach((p, i) => { if (TT.model.validCoord(p)) valid.push(i); });
         this.pts = new Array(this.points.length).fill(null);
         if (!valid.length) {
+            this._proj = null;
             ctx.fillStyle = T.faint; ctx.font = '13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText('无坐标数据（室内活动），仅可导出 FIT', w / 2, h / 2);
             return;
@@ -363,8 +503,11 @@ TT.charts = (function () {
         const s = Math.min(sx, sy);
         const ox = (w - (maxLon - minLon) * cosLat * s) / 2;
         const oy = (h - (maxLat - minLat) * s) / 2;
-        const PX = p => ox + (p.lon - minLon) * cosLat * s;
-        const PY = p => h - oy - (p.lat - minLat) * s;
+        this._proj = { s, ox, oy, cosLat, minLat, minLon, w, h };
+        // 基础适应投影之上叠加缩放/平移：屏幕 = (基础 - 中心) * zoom + 中心 + pan
+        const z = this.zoom, panX = this.panX, panY = this.panY;
+        const PX = p => { const bx = ox + (p.lon - minLon) * cosLat * s; return (bx - w / 2) * z + w / 2 + panX; };
+        const PY = p => { const by = h - oy - (p.lat - minLat) * s; return (by - h / 2) * z + h / 2 + panY; };
         for (const i of valid) this.pts[i] = { x: PX(this.points[i]), y: PY(this.points[i]) };
 
         const stride = Math.max(1, Math.floor(valid.length / 6000));
@@ -401,8 +544,8 @@ TT.charts = (function () {
             ctx.beginPath(); ctx.arc(q.x, q.y, 8, 0, 7); ctx.stroke();
             ctx.fillStyle = T.hover; ctx.beginPath(); ctx.arc(q.x, q.y, 3, 0, 7); ctx.fill();
         }
-        // 比例尺
-        const metersPerPx = 1 / s * 111320;
+        // 比例尺（含当前缩放）
+        const metersPerPx = 1 / (s * z) * 111320;
         let bar = 100; const target = metersPerPx * 80;
         const pow = Math.pow(10, Math.floor(Math.log10(target)));
         bar = (target / pow >= 5 ? 5 : target / pow >= 2 ? 2 : 1) * pow;
@@ -413,5 +556,5 @@ TT.charts = (function () {
         ctx.fillText(bar >= 1000 ? (bar / 1000) + ' km' : bar + ' m', w - pad, h - 17);
     };
 
-    return { Profile, TrackMap, theme };
+    return { Profile, TrackMap, theme, ZOOM_MIN: MIN_ZOOM, ZOOM_MAX: MAX_ZOOM };
 })();

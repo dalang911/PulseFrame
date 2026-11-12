@@ -97,6 +97,7 @@
             <button data-v="close">前移补齐</button>
           </div>
         </div>
+        <p class="repair-note brand-note">导出 FIT 的厂商标识为 <b id="fitBrand">TrackTrim</b>（development 255），不沿用源设备厂商；GPX 的 creator 同为 TrackTrim。</p>
       </div>
     </aside>
 
@@ -104,9 +105,18 @@
       <div class="card map-card">
         <div class="card-head">
           <h3 class="card-title">轨迹形状</h3>
-          <span class="muted">点击轨迹可定位点</span>
+          <div class="map-tools" role="group" aria-label="地图视图控制">
+            <button id="mapZoomOut" class="map-btn" title="缩小（快捷键 -）" aria-label="缩小">−</button>
+            <span id="mapZoom" class="map-zoom" title="当前缩放比例">100%</span>
+            <button id="mapZoomIn" class="map-btn" title="放大（快捷键 +）" aria-label="放大">+</button>
+            <button id="mapFit" class="map-btn wide" title="适应窗口（快捷键 0）">适应</button>
+            <button id="mapZoomSel" class="map-btn wide" title="放大到当前保留选区">选区</button>
+          </div>
         </div>
-        <div class="map-wrap"><canvas id="mapCanvas"></canvas></div>
+        <div class="map-wrap">
+          <canvas id="mapCanvas" tabindex="0" aria-label="轨迹形状图，可缩放平移"></canvas>
+          <span class="map-hint">滚轮缩放 · 拖动平移 · 点击定位</span>
+        </div>
         <div id="inspectBar" class="inspect-bar" hidden>
           <span id="inspectInfo" class="inspect-info"></span>
           <span class="inspect-actions">
@@ -179,6 +189,7 @@
       <section>
         <h3>2 · 裁剪头尾</h3>
         <p>默认「裁剪头尾」模式：在剖面图上<b>拖动</b>选出要保留的范围，或直接拖动两端的「起 / 止」手柄；也可在下方输入精确的起点/终点（时间轴为 <code>时:分:秒</code>，距离轴为公里）。地图上的绿点为起点、红点为终点。</p>
+        <p>轨迹形状图可<b>滚轮缩放</b>、<b>拖动平移</b>、双击放大（Shift+双击缩小）；右上角「适应」回到全图、「选区」放大到保留段，点击轨迹即可精细定位。键盘 <code>+ / - / 0</code> 与方向键同样可用。</p>
       </section>
       <section>
         <h3>3 · 删除中间片段</h3>
@@ -197,7 +208,7 @@
       </section>
       <section>
         <h3>5 · 导出</h3>
-        <p>设置活动名称与运动类型后，点「导出 GPX」或「导出 FIT」。GPX 含心率/步频/功率扩展；FIT 为标准活动文件（file_id + record + lap + session + activity，带 CRC 校验），可直接导入 Garmin Connect / COROS / Strava。</p>
+        <p>设置活动名称与运动类型后，点「导出 GPX」或「导出 FIT」。GPX 含心率/步频/功率扩展；FIT 为标准活动文件（file_id + record + lap + session + activity，带 CRC 校验），可直接导入 Garmin Connect / COROS / Strava。导出文件的厂商标识统一为 <b>TrackTrim</b>，不沿用源设备。</p>
       </section>
       <section>
         <h3>隐私</h3>

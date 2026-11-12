@@ -63,7 +63,7 @@ TT.fit = TT.fit || {};
     // 字段映射：kind time=FIT秒→ms，semi=半圆→度；scale/offset 按 FIT profile
     const F = (key, scale, offset, kind) => ({ key, scale: scale || 1, offset: offset || 0, kind });
     const FIELD_MAP = {
-        0: { 0: F('type'), 1: F('manufacturer'), 2: F('product'), 3: F('serial'), 4: F('time_created', 1, 0, 'time') },
+        0: { 0: F('type'), 1: F('manufacturer'), 2: F('product'), 3: F('serial'), 4: F('time_created', 1, 0, 'time'), 8: F('productName') },
         20: {
             253: F('t', 1, 0, 'time'), 0: F('lat', 1, 0, 'semi'), 1: F('lon', 1, 0, 'semi'),
             2: F('ele', 5, 500), 78: F('ele', 5, 500), 3: F('hr'), 4: F('cad'), 53: F('fracCad', 128),
@@ -218,6 +218,7 @@ TT.fit = TT.fit || {};
                 created: fileId && fileId.time_created != null ? fileId.time_created : null,
                 manufacturer: fileId ? fileId.manufacturer : null,
                 product: fileId ? fileId.product : null,
+                productName: fileId && fileId.productName != null ? fileId.productName : null,
                 crcOk, sessions: sessions.length, laps: laps.length,
                 timerEvents: events.filter(e => e.event === 0).length
             }
