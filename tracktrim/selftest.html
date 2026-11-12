@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>TrackTrim 自测</title>
+<style>
+  body { font-family: system-ui, "Microsoft YaHei", sans-serif; background: #f3f0e9; color: #1f3a42; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; } #summary { font-size: 16px; font-weight: 700; padding: 12px 16px; border-radius: 10px; margin: 12px 0; }
+  #summary.pass { background: #e2f0ef; color: #0a5c5b; } #summary.fail { background: #fbe9e9; color: #b23; }
+  .grp { font-weight: 700; margin: 14px 0 6px; color: #0e7c7b; }
+  .t { font-size: 13px; padding: 3px 0; border-bottom: 1px solid #e5dfd2; }
+  .t.ok::before { content: "✓ "; color: #10b981; } .t.no::before { content: "✕ "; color: #d94848; }
+  .t.no { color: #d94848; }
+</style>
+</head>
+<body>
+<h1>TrackTrim 自测（核心逻辑 / 往返一致性）</h1>
+<div id="summary">运行中…</div>
+<div id="out"></div>
+<script src="util.js"></script>
+<script src="parsers.js"></script>
+<script src="fitread.js"></script>
+<script src="model.js"></script>
+<script src="fitwrite.js"></script>
+<script src="gpxwrite.js"></script>
+<script>
+(function () {
+    const U = TT.util, M = TT.model;
+    let pass = 0, fail = 0;
+    const out = document.getElementById('out');
+    function grp(name) { const d = document.createElement('div'); d.className = 'grp'; d.textContent = name; out.appendChild(d); }
+    function ok(cond, msg) {
+        if (cond) pass++; else fail++;
+        const d = document.createElement('div'); d.className = 't ' + (cond ? 'ok' : 'no'); d.textContent = msg;
+        out.appendChild(d);
+    }
+    function near(a, b, tol, msg) { ok(a != null && b != null && Math.abs(a - b) <= tol, msg + ' (' + a + ' ≈ ' + b + ')'); }
+    const enc = s => new TextEncoder().encode(s).buffer;
+
+    function synth(n, opt) {
+        opt = opt || {};
+        const t0 = Date.UTC(2026, 10, 12, 1, 0, 0), pts = [];
+        for (let i = 0; i < n; i++) {
+            pts.push({
+                t: opt.noTime ? null : t0 + i * 1000,
+                lat: opt.noCoord ? null : 35.4 + i * 0.0001,
+                lon: opt.noCoord ? null : 119.5 + i * 0.00012,
+                ele: opt.noEle ? null : 10 + 5 * Math.sin(i / 30),
+                hr: opt.noHr ? null : 130 + (i % 20),
+                cad: 88 + (i % 5), power: 200 + (i % 30),
+                speed: null, dist: opt.noCoord ? i * 3 : null, temp: 22
+            });
+        }
+        return { name: 'synth', format: 'TEST', sport: 'running', points: pts, meta: {} };
+    }
+
+    grp('工具函数');
+    near(U.hav(0, 0, 0, 1), 111195, 1, 'haversine 赤道 1° ≈ 111.2km');
+    near(U.semiToDeg(U.degToSemi(35.413748)), 35.413748, 1e-7, '半圆↔度 往返');
+    const tt = Date.UTC(2026, 10, 12, 1, 0, 0);
+    ok(U.fitToMs(U.msToFit(tt)) === tt, 'FIT 时间纪元往返');
+    ok(U.parseHMS('1:02:03') === 3723, 'HMS 解析');
+    ok(U.fmtHMS(3723) === '01:02:03', 'HMS 格式化');
+
+    grp('GPX / TCX / KML / CSV 解析');
+    const gpxStr = '<?xml version="1.0"?><gpx xmlns="http://www.topografix.com/GPX/1/1" xmlns:gpxtpx="http://www.garmin.com/xmlschemas/TrackPointExtension/v1"><trk><name>Test</name><type>running</type><trkseg>' +
+        '<trkpt lat="35.4" lon="119.5"><ele>10.5</ele><time>2026-11-12T01:00:00Z</time><extensions><gpxtpx:TrackPointExtension><gpxtpx:hr>140</gpxtpx:hr><gpxtpx:cad>90</gpxtpx:cad></gpxtpx:TrackPointExtension><power>220</power></extensions></trkpt>' +
+        '<trkpt lat="35.4001" lon="119.5001"><ele>11</ele><time>2026-11-12T01:00:01Z</time></trkpt>' +
+        '</trkseg></trk></gpx>';
+    const g = TT.parsers.parse(enc(gpxStr), 'a.gpx');
+    ok(g.format === 'GPX' && g.points.length === 2, 'GPX 点数');
+    ok(g.sport === 'running', 'GPX 运动类型');
+    ok(g.points[0].hr === 140 && g.points[0].cad === 90 && g.points[0].power === 220, 'GPX 扩展字段 hr/cad/power');
+    near(g.points[0].ele, 10.5, 1e-9, 'GPX 海拔');
+    ok(g.points[0].t === Date.parse('2026-11-12T01:00:00Z'), 'GPX 时间');
+
+    const tcxStr = '<?xml version="1.0"?><TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2"><Activities><Activity Sport="Biking"><Lap><Track>' +
+        '<Trackpoint><Time>2026-11-12T01:00:00Z</Time><Position><LatitudeDegrees>35.4</LatitudeDegrees><LongitudeDegrees>119.5</LongitudeDegrees></Position><AltitudeMeters>10</AltitudeMeters><DistanceMeters>0</DistanceMeters><HeartRateBpm><Value>130</Value></HeartRateBpm></Trackpoint>' +
+        '</Track></Lap></Activity></Activities></TrainingCenterDatabase>';
+    const tcx = TT.parsers.parse(enc(tcxStr), 'a.tcx');
+    ok(tcx.format === 'TCX' && tcx.sport === 'cycling' && tcx.points[0].hr === 130, 'TCX 解析 + 运动类型');
+
+    const kmlStr = '<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2"><Document><Placemark><name>K</name><gx:Track>' +
+        '<when>2026-11-12T01:00:00Z</when><when>2026-11-12T01:00:01Z</when>' +
+        '<gx:coord>119.5 35.4 10</gx:coord><gx:coord>119.5001 35.4001 11</gx:coord>' +
+        '</gx:Track></Placemark></Document></kml>';
+    const kml = TT.parsers.parse(enc(kmlStr), 'a.kml');
+    ok(kml.format === 'KML' && kml.points.length === 2 && kml.points[0].lat === 35.4 && kml.points[0].ele === 10, 'KML gx:Track 解析');
+
+    const csvStr = 'time,lat,lon,ele,hr,cad,power\n2026-11-12T01:00:00Z,35.4,119.5,10,140,90,220\n2026-11-12T01:00:01Z,35.4001,119.5001,11,141,91,221';
+    const csv = TT.parsers.parse(enc(csvStr), 'a.csv');
+    ok(csv.format === 'CSV' && csv.points.length === 2 && csv.points[1].hr === 141, 'CSV 列识别');
+
+    grp('FIT 写→读 往返');
+    const raw = synth(300);
+    const rep = M.repair(raw, M.defaultSettings(raw, M.detectIssues(raw)));
+    const sel = M.applySelection(rep.points, { start: 0, end: 299, cuts: [] }, 'keep');
+    const buf = TT.fit.write(sel.points, sel.segments, { sport: 'running', tzOffsetMin: 480 });
+    const back = TT.fit.read(buf, 'rt');
+    ok(back.points.length === 300, 'FIT 往返点数');
+    ok(back.meta.crcOk === true, 'FIT CRC 校验通过');
+    ok(back.sport === 'running', 'FIT 往返运动类型');
+    let maxLat = 0, maxEle = 0, maxDist = 0, maxSpd = 0, tsBad = 0, hrBad = 0, cadBad = 0, pwBad = 0, tempBad = 0;
+    for (let i = 0; i < 300; i++) {
+        const a = sel.points[i], b = back.points[i];
+        if (a.t !== b.t) tsBad++;
+        if (a.hr !== b.hr) hrBad++;
+        if (Math.abs(a.cad - b.cad) > 0.01) cadBad++;
+        if (a.power !== b.power) pwBad++;
+        if (a.temp !== b.temp) tempBad++;
+        maxLat = Math.max(maxLat, Math.abs(a.lat - b.lat), Math.abs(a.lon - b.lon));
+        maxEle = Math.max(maxEle, Math.abs(a.ele - b.ele));
+        maxDist = Math.max(maxDist, Math.abs(a.dist - b.dist));
+        if (a.speed != null && b.speed != null) maxSpd = Math.max(maxSpd, Math.abs(a.speed - b.speed));
+    }
+    ok(tsBad === 0, 'FIT 往返时间戳逐点一致');
+    ok(hrBad === 0 && cadBad === 0 && pwBad === 0 && tempBad === 0, 'FIT 往返 hr/cad/power/temp 一致');
+    ok(maxLat < 1e-6, 'FIT 往返坐标 < 1e-6°');
+    ok(maxEle <= 0.2, 'FIT 往返海拔 ≤ 0.2m');
+    ok(maxDist <= 0.01, 'FIT 往返距离 ≤ 0.01m');
+    ok(maxSpd <= 0.001, 'FIT 往返速度 ≤ 0.001m/s');
+
+    grp('FIT 缺测字段 / 压缩时间戳');
+    const rawH = synth(50, { noHr: true, noEle: true });
+    const repH = M.repair(rawH, M.defaultSettings(rawH, M.detectIssues(rawH)));
+    const selH = M.applySelection(repH.points, { start: 0, end: 49, cuts: [] }, 'keep');
+    const backH = TT.fit.read(TT.fit.write(selH.points, selH.segments, { sport: 'generic' }), 'h');
+    ok(backH.points.every(p => p.hr == null && p.ele == null), 'FIT 缺测字段读回 null（无效值哨兵）');
+
+    // 手工构造含压缩时间戳头的最小 FIT
+    (function () {
+        const bytes = [];
+        const u8 = v => bytes.push(v & 255), u16 = v => { u8(v); u8(v >> 8); }, u32 = v => { u8(v); u8(v >>> 8); u8(v >>> 16); u8(v >>> 24); };
+        for (let i = 0; i < 14; i++) u8(0);
+        u8(0x40); u8(0); u8(0); u16(20); u8(3); // def local0 record: ts,lat,lon
+        u8(253); u8(4); u8(0x86); u8(0); u8(4); u8(0x85); u8(1); u8(4); u8(0x85);
+        const T = 1000000; // T & 0x1F == 0
+        u8(0); u32(T); u32(U.degToSemi(35.4)); u32(U.degToSemi(119.5)); // 正常头，设基准
+        u8(0x81); u32(U.degToSemi(35.4001)); u32(U.degToSemi(119.5001)); // 压缩头 offset=1 → T+1
+        u8(0x82); u32(U.degToSemi(35.4002)); u32(U.degToSemi(119.5002)); // offset=2 → T+2
+        const dataSize = bytes.length - 14;
+        bytes[0] = 14; bytes[1] = 0x20; bytes[4] = dataSize & 255; bytes[5] = (dataSize >> 8) & 255;
+        bytes[8] = 0x2E; bytes[9] = 0x46; bytes[10] = 0x49; bytes[11] = 0x54;
+        const hc = TT.fit.crc16(new Uint8Array(bytes.slice(0, 12)), 0, 12);
+        bytes[12] = hc & 255; bytes[13] = hc >> 8;
+        const all = new Uint8Array(bytes.length + 2); all.set(bytes);
+        const fc = TT.fit.crc16(all, 0, bytes.length); all[bytes.length] = fc & 255; all[bytes.length + 1] = fc >> 8;
+        const r = TT.fit.read(all.buffer, 'ct');
+        ok(r.points.length === 3, '压缩时间戳：点数');
+        ok(r.points[0].t === U.fitToMs(T) && r.points[1].t === U.fitToMs(T + 1) && r.points[2].t === U.fitToMs(T + 2), '压缩时间戳：T/T+1/T+2 正确');
+        ok(r.meta.crcOk === true, '压缩时间戳：CRC 通过');
+    })();
+
+    grp('GPX 写→读 往返');
+    const gpxOut = TT.gpx.write(sel.points, sel.segments, { name: 'RoundTrip', sport: 'cycling' });
+    const gBack = TT.parsers.parse(enc(gpxOut), 'rt.gpx');
+    ok(gBack.points.length === 300 && gBack.sport === 'cycling', 'GPX 往返点数/类型');
+    ok(gBack.points[0].hr === sel.points[0].hr && gBack.points[0].power === sel.points[0].power, 'GPX 往返扩展字段');
+    near(gBack.points[5].lat, sel.points[5].lat, 1e-7, 'GPX 往返坐标');
+    ok(gBack.points[5].t === sel.points[5].t, 'GPX 往返时间');
+
+    grp('模型：裁剪 / 删片段 / 时间轴');
+    const r100 = synth(100);
+    const p100 = M.repair(r100, M.defaultSettings(r100, M.detectIssues(r100))).points;
+    const trim = M.applySelection(p100, { start: 10, end: 89, cuts: [] }, 'keep');
+    ok(trim.points.length === 80, '头尾裁剪 10..89 → 80 点');
+    near(trim.points[0].dist, 0, 1e-9, '裁剪后距离从 0 起算');
+    ok(trim.points[0].t === p100[10].t, '裁剪保留原始时间');
+
+    const cutKeep = M.applySelection(p100, { start: 0, end: 99, cuts: [{ s: 20, e: 29 }] }, 'keep');
+    ok(cutKeep.points.length === 90 && cutKeep.segments.length === 2, '删中间 10 点 → 90 点 2 段');
+    const stK = M.stats(cutKeep.points, cutKeep.segments);
+    near(stK.elapsed, 99, 0.01, '保留空档：总时长不变 99s');
+    near(stK.moving, 88, 0.01, '保留空档：移动时长 88s（删 10 点形成 11s 空档）');
+
+    const cutClose = M.applySelection(p100, { start: 0, end: 99, cuts: [{ s: 20, e: 29 }] }, 'close');
+    const stC = M.stats(cutClose.points, cutClose.segments);
+    near(stC.elapsed, 89, 0.01, '前移补齐：总时长缩短为 89s');
+    near(stC.moving, 89, 0.01, '前移补齐：合并单段，移动时长=总时长 89s');
+    ok(cutClose.segments.length === 1, '前移补齐：合并为单段（无暂停）');
+    let maxGap = 0;
+    for (let i = 1; i < cutClose.points.length; i++) maxGap = Math.max(maxGap, cutClose.points[i].t - cutClose.points[i - 1].t);
+    ok(maxGap <= 1000, '前移补齐：时间轴连续（最大间隔 ' + maxGap + 'ms）');
+
+    const multi = M.applySelection(p100, { start: 0, end: 99, cuts: [{ s: 10, e: 14 }, { s: 50, e: 59 }] }, 'close');
+    ok(multi.points.length === 85 && multi.segments.length === 1, '多段删除 close：85 点合并单段');
+    const multiK = M.applySelection(p100, { start: 0, end: 99, cuts: [{ s: 10, e: 14 }, { s: 50, e: 59 }] }, 'keep');
+    ok(multiK.points.length === 85 && multiK.segments.length === 3, '多段删除 keep：85 点 3 段');
+
+    grp('模型：缺失修复');
+    const noT = synth(60, { noTime: true });
+    const sNoT = M.defaultSettings(noT, M.detectIssues(noT));
+    sNoT.startTime = Date.UTC(2026, 10, 12, 2, 0, 0); sNoT.interval = 2;
+    const repT = M.repair(noT, sNoT);
+    ok(repT.points[0].t === sNoT.startTime && repT.points[1].t === sNoT.startTime + 2000 && repT.points[59].t === sNoT.startTime + 118000, '无时间 → 起始+间隔补全');
+
+    const dupRaw = synth(10);
+    dupRaw.points[3].t = dupRaw.points[2].t; // 重复
+    dupRaw.points[7].t = dupRaw.points[1].t; // 乱序+重复
+    const repD = M.repair(dupRaw, M.defaultSettings(dupRaw, M.detectIssues(dupRaw)));
+    let sorted = true, dups = 0;
+    for (let i = 1; i < repD.points.length; i++) { if (repD.points[i].t < repD.points[i - 1].t) sorted = false; if (repD.points[i].t === repD.points[i - 1].t) dups++; }
+    ok(sorted && dups === 0, '乱序/重复时间修复');
+
+    const badRaw = synth(20);
+    badRaw.points[5].lat = 0; badRaw.points[5].lon = 0; // Null Island
+    badRaw.points[8].lat = 999; // 越界
+    const repB = M.repair(badRaw, M.defaultSettings(badRaw, M.detectIssues(badRaw)));
+    ok(repB.points.length === 18, '剔除 2 个无效坐标点');
+
+    const indoor = synth(40, { noCoord: true });
+    const repI = M.repair(indoor, M.defaultSettings(indoor, M.detectIssues(indoor)));
+    ok(repI.indoor === true, '识别室内活动（无坐标）');
+    const selI = M.applySelection(repI.points, { start: 5, end: 39, cuts: [] }, 'keep');
+    near(selI.points[0].dist, 0, 1e-9, '室内：源距离裁剪后归零');
+    ok(selI.points[0].dist === 0 && selI.points[1].dist === 3, '室内：保留源距离增量');
+    const fitI = TT.fit.read(TT.fit.write(selI.points, selI.segments, { sport: 'generic' }), 'i');
+    ok(fitI.points.length === 35 && fitI.points.every(p => p.lat == null), '室内 FIT 导出（无坐标）');
+
+    grp('统计');
+    const eleRaw = { name: 'e', format: 'T', sport: 'generic', points: [], meta: {} };
+    const base = Date.UTC(2026, 0, 1);
+    [0, 10, 20, 15, 25].forEach((e, i) => eleRaw.points.push({ t: base + i * 1000, lat: 35 + i * 0.001, lon: 119, ele: e, hr: 120 + i * 10, cad: null, power: null, speed: null, dist: null, temp: null }));
+    const repE = M.repair(eleRaw, M.defaultSettings(eleRaw, M.detectIssues(eleRaw)));
+    const stE = M.stats(repE.points);
+    near(stE.gain, 30, 0.01, '爬升 0→10→20→(15)→25 = 30m');
+    near(stE.loss, 5, 0.01, '下降 20→15 = 5m');
+    ok(stE.maxHr === 160 && stE.avgHr === 140, '心率统计 max160 avg140');
+
+    const sum = document.getElementById('summary');
+    sum.textContent = pass + ' 通过 / ' + fail + ' 失败';
+    sum.className = fail ? 'fail' : 'pass';
+    console.log('TrackTrim selftest: ' + pass + '/' + (pass + fail));
+    window.__selftest = { pass, fail };
+})();
+</script>
+</body>
+</html>

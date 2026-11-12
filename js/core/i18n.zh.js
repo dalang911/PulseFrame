@@ -20,6 +20,7 @@ export const ZH_DICT = {
     'v2.0 · Updated: Native / Local / Shared three panels; progress bar scales with container;': 'v2.0 · 更新：原生 / 本地 / 共享三面板；进度条随容器缩放；',
     'Generate Video': '生成视频',
     'PulseFrame Studio — build reusable dashboard components': 'PulseFrame Studio — 制作可复用的仪表盘组件',
+    'TrackTrim — trim & edit GPS tracks, export GPX / FIT': 'TrackTrim — 裁剪 / 编辑 GPS 轨迹，导出 GPX / FIT',
     'Language': '语言',
     'Watch the intro video on Bilibili': '在 Bilibili 观看介绍视频',
     'View source on GitHub': '在 GitHub 查看源码',

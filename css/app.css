@@ -178,6 +178,28 @@ html, body {
     text-decoration: none;
 }
 
+/* TrackTrim：青碧描边（沿用工具自身的 petrol 身份，与 PulseFrame 青色尾端同色谱），与 Studio 琥珀并列成工具组 */
+.topnav .nav-trim {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 12px;
+    border: 1px solid #2bb3a3;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #0e7c7b;
+    background-color: #f0fbf9;
+    text-decoration: none;
+    transition: background-color .15s, color .15s;
+}
+
+.topnav .nav-trim:hover {
+    background-color: #e0f5f1;
+    color: #0a5f5e;
+    text-decoration: none;
+}
+
 .topnav .nav-sep {
     width: 1px;
     height: 18px;
