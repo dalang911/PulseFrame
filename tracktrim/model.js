@@ -94,7 +94,8 @@ TT.model = (function () {
         let d = 0;
         for (let i = 0; i < points.length; i++) {
             const p = points[i];
-            if (i > 0 && validCoord(p) && validCoord(points[i - 1])) {
+            // _join：合并轨迹的段边界，两侧空间跳变（如转场）不计入里程；单文件无此标记，行为不变
+            if (i > 0 && !p._join && validCoord(p) && validCoord(points[i - 1])) {
                 d += U.hav(points[i - 1].lat, points[i - 1].lon, p.lat, p.lon);
             }
             p.dist = d;
@@ -212,6 +213,8 @@ TT.model = (function () {
             const p = Object.assign({}, points[i]);
             if (shift && p.t != null) p.t = Math.round(p.t - shift);
             if (p._spd) { p.speed = null; }
+            // _pause：合并轨迹「保留原始时间」的段边界另起一段（空档计为暂停、导出写入暂停事件）；单文件无此标记，行为不变
+            if (p._pause && cur.length) { segments.push(cur); cur = []; }
             cur.push(p);
         }
         if (cur.length) segments.push(cur);
@@ -224,7 +227,7 @@ TT.model = (function () {
             for (const seg of segments) {
                 let prev = null;
                 for (const p of seg) {
-                    if (prev && validCoord(p) && validCoord(prev)) d += U.hav(prev.lat, prev.lon, p.lat, p.lon);
+                    if (prev && !p._join && validCoord(p) && validCoord(prev)) d += U.hav(prev.lat, prev.lon, p.lat, p.lon);
                     p.dist = d;
                     prev = p;
                     flat.push(p);

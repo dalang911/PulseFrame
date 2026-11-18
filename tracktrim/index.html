@@ -38,7 +38,7 @@
         <path d="M40 6v22m0-22l-8 8m8-8l8 8" stroke="var(--ink)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
       <h2>拖入轨迹文件，开始编辑</h2>
-      <p class="dz-desc">裁剪头尾 · 删除中间片段 · 补全缺失数据 · 导出 GPX / FIT</p>
+      <p class="dz-desc">裁剪头尾 · 删除中间片段 · 补全缺失数据 · 多轨迹合并 · 导出 GPX / FIT</p>
       <button id="pickBtn" class="btn primary lg">选择文件</button>
       <div class="dz-or">或</div>
       <button id="demoBtn" class="btn ghost lg">试用示例轨迹</button>
@@ -46,7 +46,47 @@
         <span class="fmt">GPX</span><span class="fmt">FIT</span><span class="fmt">TCX</span><span class="fmt">KML</span><span class="fmt">CSV</span>
       </div>
       <p class="privacy">🔒 全部在浏览器本地完成，文件不会上传到任何服务器</p>
-      <input type="file" id="fileInput" accept=".gpx,.fit,.tcx,.kml,.csv,.txt" hidden>
+      <p class="privacy">一次选择多个文件即可合并为一条轨迹</p>
+      <input type="file" id="fileInput" accept=".gpx,.fit,.tcx,.kml,.csv,.txt" multiple hidden>
+    </div>
+  </section>
+
+  <section id="mergePanel" class="merge-panel" hidden>
+    <div class="card">
+      <div class="card-head">
+        <h3 class="card-title">合并轨迹
+          <span class="hint" title="把多条轨迹按顺序拼接成一条新轨迹，合并后仍可裁剪、删除片段并导出 GPX / FIT。">?</span>
+        </h3>
+        <button id="mergeCancel" class="mini-btn">取消</button>
+      </div>
+      <p class="repair-note" id="mergeIntro">已选择多条轨迹。用 ↑↓ 调整顺序（默认按开始时间），选择时间轴处理方式后合并。</p>
+      <ul id="mergeList" class="merge-list"></ul>
+      <div class="field">
+        <span>时间轴
+          <span class="hint" title="保留原始时间：各轨迹时间不变，轨迹之间的空档计为暂停（适合合并同一天的多段）。首尾相接：后一条整体平移到前一条结束后，时间连续、总时长为各段之和（适合设备自动拆分的文件）。">?</span>
+        </span>
+        <div class="seg" id="mergeModeSeg">
+          <button data-v="keep" class="on">保留原始时间</button>
+          <button data-v="shift">首尾相接</button>
+        </div>
+      </div>
+      <div class="inline-fields">
+        <label class="field"><span>活动名称</span><input id="mergeName" type="text" placeholder="合并轨迹"></label>
+        <label class="field"><span>运动类型</span>
+          <select id="mergeSport">
+            <option value="running">跑步</option>
+            <option value="cycling">骑行</option>
+            <option value="walking">步行</option>
+            <option value="hiking">徒步</option>
+            <option value="swimming">游泳</option>
+            <option value="generic">其他</option>
+          </select>
+        </label>
+      </div>
+      <div class="merge-actions">
+        <button id="mergeGo" class="btn primary">合并并编辑</button>
+      </div>
+      <p id="mergeNote" class="repair-note"></p>
     </div>
   </section>
 
@@ -184,7 +224,7 @@
     <div class="help-body">
       <section>
         <h3>1 · 上传</h3>
-        <p>把 <b>GPX / FIT / TCX / KML / CSV</b> 文件拖进页面，或点「选择文件」。FIT 为 Garmin / COROS / 高驰等设备的二进制格式；CSV 需含 <code>lat,lon</code>（可选 <code>time,ele,hr,cad,power</code>）等常见列名。所有解析都在本地完成。</p>
+        <p>把 <b>GPX / FIT / TCX / KML / CSV</b> 文件拖进页面，或点「选择文件」。FIT 为 Garmin / COROS / 高驰等设备的二进制格式；CSV 需含 <code>lat,lon</code>（可选 <code>time,ele,hr,cad,power</code>）等常见列名。所有解析都在本地完成。<b>一次选择多个文件</b>会进入合并流程（见第 6 节）。</p>
       </section>
       <section>
         <h3>2 · 裁剪头尾</h3>
@@ -211,6 +251,15 @@
         <p>设置活动名称与运动类型后，点「导出 GPX」或「导出 FIT」。GPX 含心率/步频/功率扩展；FIT 为标准活动文件（file_id + record + lap + session + activity，带 CRC 校验），可直接导入 Garmin Connect / COROS / Strava。导出文件的厂商标识统一为 <b>TrackTrim</b>，不沿用源设备。</p>
       </section>
       <section>
+        <h3>6 · 合并多条轨迹</h3>
+        <p>一次选择（或拖入）<b>多个文件</b>即进入合并面板：列出每条轨迹的点数 / 起始时间 / 距离，用 <b>↑↓</b> 调整顺序（默认按开始时间排序），可移除某条。两种时间轴：</p>
+        <ul>
+          <li><b>保留原始时间</b>：各轨迹时间不变，轨迹之间的空档计为暂停；若时间重叠会自动最小平移并提示。适合合并同一天的多段记录。</li>
+          <li><b>首尾相接</b>：后一条整体平移到前一条结束之后，时间连续、总时长为各段之和。适合设备自动拆分成的多个文件。</li>
+        </ul>
+        <p>点「合并并编辑」后得到一条新轨迹，<b>仍可继续裁剪、删除片段、修复缺失并导出 GPX / FIT</b>；距离从 0 重新累计，轨迹之间的空间转场不计入里程。合并只新增拼接层，不改变单文件的任何处理逻辑。</p>
+      </section>
+      <section>
         <h3>隐私</h3>
         <p>本工具是纯静态页面，<b>不联网、不上传</b>。</p>
       </section>
@@ -222,6 +271,7 @@
 <script src="parsers.js"></script>
 <script src="fitread.js"></script>
 <script src="model.js"></script>
+<script src="merge.js"></script>
 <script src="fitwrite.js"></script>
 <script src="gpxwrite.js"></script>
 <script src="demo.js"></script>

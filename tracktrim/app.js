@@ -9,7 +9,8 @@ TT.app = (function () {
         raw: null, issues: null, settings: null, repaired: null, result: null,
         sel: { start: 0, end: 0, cuts: [] },
         mode: 'trim', xMode: 'time', series: { ele: true, speed: false, hr: false },
-        inspect: -1, baseName: 'track'
+        inspect: -1, baseName: 'track',
+        mergeTracks: null, mergeMode: 'keep'
     };
     let profile, map, toastTimer;
 
@@ -57,6 +58,7 @@ TT.app = (function () {
         renderFileMeta();
         renderRepairControls();
         $('dropzone').hidden = true;
+        $('mergePanel').hidden = true;
         $('workspace').hidden = false;
         $('inspectBar').hidden = true;
         rebuild();
@@ -75,6 +77,93 @@ TT.app = (function () {
             console.error(e);
             toast('加载失败：' + e.message, true);
         }
+    }
+
+    // 多文件：1 个走原单文件流程；≥2 个进入合并面板。单文件逻辑完全不变。
+    async function loadFiles(files) {
+        files = Array.from(files || []).filter(Boolean);
+        if (!files.length) return;
+        if (files.length === 1) return loadFile(files[0]);
+        toast('解析 ' + files.length + ' 个文件…');
+        const tracks = [], errors = [];
+        for (const f of files) {
+            try {
+                const buf = await f.arrayBuffer();
+                const raw = TT.parsers.parse(buf, f.name);
+                if (!raw.name) raw.name = f.name.replace(/\.[^.]+$/, '');
+                tracks.push(raw);
+            } catch (e) { console.error(e); errors.push(f.name + '：' + e.message); }
+        }
+        if (errors.length) toast('部分文件解析失败：' + errors.join('；'), true);
+        if (!tracks.length) return;
+        if (tracks.length === 1) {
+            setupRaw(tracks[0], tracks[0].name);
+            toast('已加载 ' + tracks[0].points.length + ' 个轨迹点（' + tracks[0].format + '）');
+            return;
+        }
+        enterMerge(tracks);
+    }
+
+    /* ---------- 合并面板 ---------- */
+    function trackStart(t) {
+        if (t.meta && t.meta.created != null) return t.meta.created;
+        for (const p of t.points) if (p.t != null) return p.t;
+        return Infinity;
+    }
+
+    function enterMerge(tracks) {
+        tracks.sort((a, b) => trackStart(a) - trackStart(b));
+        state.mergeTracks = tracks;
+        state.mergeMode = 'keep';
+        segSet('mergeModeSeg', 'keep');
+        $('mergeSport').value = tracks[0].sport || 'generic';
+        $('mergeName').value = '合并 · ' + tracks.length + ' 条轨迹';
+        $('mergeNote').textContent = '';
+        renderMergeList();
+        $('dropzone').hidden = true;
+        $('workspace').hidden = true;
+        $('mergePanel').hidden = false;
+        toast('已选择 ' + tracks.length + ' 条轨迹，调整顺序后合并');
+    }
+
+    function renderMergeList() {
+        const ts = state.mergeTracks;
+        $('mergeIntro').textContent = '已选择 ' + ts.length + ' 条轨迹。用 ↑↓ 调整顺序（默认按开始时间），选择时间轴处理方式后合并。';
+        const dispDist = t => {
+            const st = M.stats(t.points);
+            if (st.dist != null) return U.fmtDist(st.dist);
+            let d = 0, prev = null;
+            for (const p of t.points) if (M.validCoord(p)) { if (prev) d += U.hav(prev.lat, prev.lon, p.lat, p.lon); prev = p; }
+            return prev ? U.fmtDist(d) : '—';
+        };
+        $('mergeList').innerHTML = ts.map((t, i) => {
+            const t0 = trackStart(t);
+            const when = isFinite(t0) ? U.fmtDate(t0) + ' ' + U.fmtClock(t0) : '无时间';
+            const dist = dispDist(t);
+            return '<li>' +
+                '<span class="merge-idx">' + (i + 1) + '</span>' +
+                '<span class="merge-badge">' + U.escapeXml(t.format) + '</span>' +
+                '<div class="merge-info"><div class="merge-name" title="' + U.escapeXml(t.name) + '">' + U.escapeXml(t.name) + '</div>' +
+                '<div class="merge-sub">' + t.points.length + ' 点 · ' + when + ' · ' + dist + '</div></div>' +
+                '<span class="merge-ctl">' +
+                '<button data-act="up" data-i="' + i + '" title="上移"' + (i === 0 ? ' disabled' : '') + '>↑</button>' +
+                '<button data-act="down" data-i="' + i + '" title="下移"' + (i === ts.length - 1 ? ' disabled' : '') + '>↓</button>' +
+                '<button data-act="del" data-i="' + i + '" class="del" title="移除"' + (ts.length <= 2 ? ' disabled' : '') + '>×</button>' +
+                '</span></li>';
+        }).join('');
+        $('mergeGo').disabled = ts.length < 2;
+    }
+
+    function doMerge() {
+        const ts = state.mergeTracks;
+        if (!ts || ts.length < 2) return;
+        try {
+            const merged = TT.merge.join(ts, { mode: state.mergeMode, sport: $('mergeSport').value, name: $('mergeName').value });
+            const n = ts.length;
+            state.mergeTracks = null;
+            setupRaw(merged, merged.name);
+            toast('已合并 ' + n + ' 条轨迹 → ' + merged.points.length + ' 点');
+        } catch (e) { console.error(e); toast('合并失败：' + e.message, true); }
     }
 
     function loadDemo() {
@@ -323,7 +412,7 @@ TT.app = (function () {
         $('pickBtn').addEventListener('click', () => fi.click());
         $('demoBtn').addEventListener('click', loadDemo);
         $('changeFile').addEventListener('click', () => fi.click());
-        fi.addEventListener('change', () => { if (fi.files[0]) loadFile(fi.files[0]); fi.value = ''; });
+        fi.addEventListener('change', () => { if (fi.files.length) loadFiles(fi.files); fi.value = ''; });
 
         const dz = $('dropzone');
         ['dragenter', 'dragover'].forEach(ev => document.body.addEventListener(ev, e => {
@@ -333,8 +422,8 @@ TT.app = (function () {
             e.preventDefault(); dz.classList.remove('dragover');
         }));
         document.body.addEventListener('drop', e => {
-            const f = e.dataTransfer && e.dataTransfer.files[0];
-            if (f) loadFile(f);
+            const fs = e.dataTransfer && e.dataTransfer.files;
+            if (fs && fs.length) loadFiles(fs);
         });
 
         profile = new TT.charts.Profile($('profileCanvas'), {
@@ -401,8 +490,28 @@ TT.app = (function () {
         $('sportSelect').addEventListener('change', e => { if (state.settings) state.settings.sport = e.target.value; });
         $('exportGpx').addEventListener('click', exportGpx);
         $('exportFit').addEventListener('click', exportFit);
+
+        /* 合并面板 */
+        segBind('mergeModeSeg', v => { state.mergeMode = v; });
+        $('mergeList').addEventListener('click', e => {
+            const btn = e.target.closest('button');
+            if (!btn || btn.disabled) return;
+            const i = +btn.dataset.i, act = btn.dataset.act, ts = state.mergeTracks;
+            if (!ts) return;
+            if (act === 'up' && i > 0) { const t = ts[i - 1]; ts[i - 1] = ts[i]; ts[i] = t; }
+            else if (act === 'down' && i < ts.length - 1) { const t = ts[i + 1]; ts[i + 1] = ts[i]; ts[i] = t; }
+            else if (act === 'del' && ts.length > 2) ts.splice(i, 1);
+            renderMergeList();
+        });
+        $('mergeGo').addEventListener('click', doMerge);
+        $('mergeCancel').addEventListener('click', () => {
+            state.mergeTracks = null;
+            $('mergePanel').hidden = true;
+            $('workspace').hidden = true;
+            $('dropzone').hidden = false;
+        });
     }
 
     document.addEventListener('DOMContentLoaded', init);
-    return { loadFile, loadDemo, state, toast };
+    return { loadFile, loadFiles, loadDemo, state, toast };
 })();

@@ -21,6 +21,7 @@
 <script src="parsers.js"></script>
 <script src="fitread.js"></script>
 <script src="model.js"></script>
+<script src="merge.js"></script>
 <script src="fitwrite.js"></script>
 <script src="gpxwrite.js"></script>
 <script src="charts.js"></script>
@@ -287,6 +288,70 @@
         tm.zoomBy(1000); ok(tm.zoom === TT.charts.ZOOM_MAX, '放大上限 ' + TT.charts.ZOOM_MAX + '×');
         tm.zoomBy(0.0001); ok(tm.zoom === TT.charts.ZOOM_MIN, '缩小下限 ' + TT.charts.ZOOM_MIN + '×（适应）');
         document.body.removeChild(cv);
+    })();
+
+    grp('多轨迹合并');
+    (function () {
+        const mk = (n, t0, lat0, lon0, name) => {
+            const pts = [];
+            for (let i = 0; i < n; i++) pts.push({ t: t0 + i * 1000, lat: lat0 + i * 0.0001, lon: lon0 + i * 0.00012, ele: 10, hr: 130, cad: 88, power: 200, speed: null, dist: null, temp: null });
+            return { name, format: 'TEST', sport: 'running', points: pts, meta: { created: t0 } };
+        };
+        const T0 = Date.UTC(2026, 10, 12, 1, 0, 0);
+        const A = mk(50, T0, 35.4, 119.5, 'A');
+        const B = mk(40, T0 + 100000, 36.0, 120.0, 'B'); // A 结束于 T0+49000，B 在其后 51s
+
+        // 首尾相接
+        const sh = TT.merge.join([A, B], { mode: 'shift' });
+        ok(sh.points.length === 90 && sh.format === 'MERGED', 'shift：点数 90 / 格式 MERGED');
+        ok(sh.points[50].t === sh.points[49].t + 1000, 'shift：B 首接 A 尾 +1s');
+        let mg = 0; for (let i = 1; i < sh.points.length; i++) mg = Math.max(mg, sh.points[i].t - sh.points[i - 1].t);
+        ok(mg <= 1000, 'shift：时间轴连续（最大间隔 ' + mg + 'ms）');
+        ok(sh.points[50]._join === true && !sh.points[50]._pause, 'shift：边界 _join 跳变不计、无 _pause（单段）');
+        const shRep = M.repair(sh, M.defaultSettings(sh, M.detectIssues(sh)));
+        const shSel = M.applySelection(shRep.points, { start: 0, end: 89, cuts: [] }, 'keep');
+        ok(shSel.segments.length === 1, 'shift：合并为单段');
+        const shSt = M.stats(shSel.points, shSel.segments);
+        near(shSt.elapsed, 89, 0.01, 'shift：总时长 89s');
+        near(shSt.moving, 89, 0.01, 'shift：移动时长 = 总时长');
+        near(shSel.points[0].dist, 0, 1e-9, 'shift：距离从 0 重算');
+        ok(shSt.dist < 2000, 'shift：段间空间跳变不计里程（' + Math.round(shSt.dist) + 'm）');
+
+        // 保留原始时间
+        const kp = TT.merge.join([A, B], { mode: 'keep' });
+        ok(kp.points.length === 90, 'keep：点数 90');
+        ok(kp.points[50].t === T0 + 100000, 'keep：B 原始时间保留');
+        ok(kp.points[50]._join === true && kp.points[50]._pause === true && !kp.points[0]._join, 'keep：B 首打 _join+_pause');
+        const kpRep = M.repair(kp, M.defaultSettings(kp, M.detectIssues(kp)));
+        const kpSel = M.applySelection(kpRep.points, { start: 0, end: 89, cuts: [] }, 'keep');
+        ok(kpSel.segments.length === 2, 'keep：边界另起一段（2 段）');
+        const kpSt = M.stats(kpSel.points, kpSel.segments);
+        near(kpSt.elapsed, 139, 0.01, 'keep：总时长 139s（含空档）');
+        near(kpSt.moving, 88, 0.01, 'keep：移动时长 88s（A49+B39，空档不计）');
+        ok(kpSt.dist < 2000, 'keep：段间空间跳变不计里程（' + Math.round(kpSt.dist) + 'm，非 ~80km）');
+
+        // 重叠自动平移
+        const Bo = mk(40, T0 + 10000, 36.0, 120.0, 'Bo');
+        const ov = TT.merge.join([A, Bo], { mode: 'keep' });
+        ok(ov.points[50].t === T0 + 50000, 'keep：重叠自动后移到 A 尾 +1s');
+        ok(ov.report.some(r => /重叠/.test(r)), 'keep：重叠已报告');
+        let ord = true; for (let i = 1; i < ov.points.length; i++) if (ov.points[i].t < ov.points[i - 1].t) ord = false;
+        ok(ord, 'keep：重叠平移后无乱序');
+
+        // 顺序
+        const ba = TT.merge.join([B, A], { mode: 'shift' });
+        ok(ba.points[0].lat === 36.0, '顺序：[B,A] 以 B 为首');
+
+        // FIT 往返 + 品牌
+        const shFit = TT.fit.read(TT.fit.write(shSel.points, shSel.segments, { sport: 'running' }), 'm');
+        ok(shFit.points.length === 90 && shFit.meta.crcOk === true, '合并 FIT 往返：90 点 / CRC 通过');
+        ok(shFit.meta.productName === 'TrackTrim' && shFit.meta.manufacturer === 255, '合并 FIT 品牌 TrackTrim/255');
+        const kpFit = TT.fit.read(TT.fit.write(kpSel.points, kpSel.segments, { sport: 'running' }), 'mk');
+        ok(kpFit.points.length === 90 && kpFit.meta.timerEvents >= 2, 'keep 合并 FIT：含暂停事件（timerEvents=' + kpFit.meta.timerEvents + '）');
+
+        // 少于 2 条报错
+        let threw = false; try { TT.merge.join([A], {}); } catch (e) { threw = true; }
+        ok(threw, '少于 2 条轨迹抛出错误');
     })();
 
     const sum = document.getElementById('summary');

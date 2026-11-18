@@ -302,6 +302,39 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 .export-summary b { color: var(--accent); font-weight: 750; }
 .export-actions { display: flex; gap: 10px; }
 
+/* 合并面板 */
+.merge-panel { display: grid; place-items: center; min-height: calc(100vh - 160px); padding: 10px 0; }
+.merge-panel .card { width: 100%; max-width: 660px; }
+.merge-list { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.merge-list li {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2);
+}
+.merge-idx {
+  flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: #fff; font-size: 11.5px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.merge-info { flex: 1; min-width: 0; }
+.merge-name { font-weight: 650; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.merge-sub { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; margin-top: 1px; }
+.merge-badge {
+  flex: none; font-family: ui-monospace, Consolas, monospace; font-size: 10px; font-weight: 800; letter-spacing: 0.5px;
+  padding: 2px 7px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--border-strong);
+}
+.merge-ctl { flex: none; display: flex; gap: 4px; }
+.merge-ctl button {
+  width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--ink-soft); font-size: 13px; line-height: 1; display: grid; place-items: center;
+  transition: all 0.14s ease;
+}
+.merge-ctl button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.merge-ctl button.del:hover:not(:disabled) { color: var(--red); border-color: var(--red); background: rgba(217, 72, 72, 0.1); }
+.merge-ctl button:disabled { opacity: 0.32; cursor: not-allowed; }
+.merge-panel .inline-fields { margin-top: 4px; }
+.merge-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+#mergeNote { margin: 12px 0 0; }
+#mergeNote:empty { display: none; }
+
 /* Toast */
 .toast {
   position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px);
