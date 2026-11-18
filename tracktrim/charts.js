@@ -214,42 +214,63 @@ TT.charts = (function () {
             for (const v of niceTicks(0, sMax, 4)) ctx.fillText((v * 3.6).toFixed(0) + '', w - p.r + 6, YS(v));
         }
 
-        // 数据抽取：每像素列取 min/max
+        // 数据抽取：按 x 位置（时间/距离）分列取 min/max，而非按点序号。
+        // 合并轨迹「保留原始时间」含大空档、或暂停点造成距离平台时，曲线才能与坐标轴/裁剪手柄对齐；
+        // 单文件均匀采样时 xs≈序号线性，与旧画法逐像素一致（观感不变）。
         const buckets = Math.max(1, Math.floor(iw));
+        const xsArr = this.xs;
+        // 真实空档（暂停 / 合并段间）才断开曲线：相邻 x 跳变远超典型步长才算空档；
+        // 稀疏采样（点数 < 像素列）留下的空列要连线，不能画成孤立点。
+        const gapThr = xm * Math.max(4 / Math.max(1, pts.length - 1), 0.005);
+        const colOf = i => U.clamp(Math.floor(xsArr[i] / xm * buckets), 0, buckets - 1);
+        const aggregate = valOf => {
+            const mn = new Array(buckets).fill(null), mx = new Array(buckets).fill(null), brk = new Array(buckets).fill(false);
+            for (let i = 0; i < pts.length; i++) {
+                const b = colOf(i);
+                if (i > 0 && (xsArr[i] - xsArr[i - 1]) > gapThr) brk[b] = true;
+                const q = valOf(pts[i]); if (q == null) continue;
+                if (mn[b] == null || q < mn[b]) mn[b] = q;
+                if (mx[b] == null || q > mx[b]) mx[b] = q;
+            }
+            return { mn, mx, brk };
+        };
         const drawLine = (getY, color, width, valOf) => {
+            const { mn, mx, brk } = aggregate(valOf);
             ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
             let started = false;
             for (let b = 0; b < buckets; b++) {
-                const i0 = Math.floor(b / buckets * pts.length), i1 = Math.max(i0 + 1, Math.floor((b + 1) / buckets * pts.length));
-                let v = null;
-                for (let i = i0; i < i1 && i < pts.length; i++) { const q = valOf(pts[i]); if (q != null) { v = v == null ? q : (b % 2 ? Math.max(v, q) : Math.min(v, q)); } }
-                if (v == null) { started = false; continue; }
+                if (brk[b]) started = false;
+                const v = b % 2 ? mx[b] : mn[b];
+                if (v == null) continue;
                 const x = p.l + (b + 0.5) / buckets * iw, y = getY(v);
                 if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
             }
             ctx.stroke();
         };
 
-        // 海拔面积
+        // 海拔面积：按连续列分段填充，真实空档处断开（不再横跨暂停空档拉一条误导的带）
         if (this.series.ele && hasEle) {
-            ctx.beginPath();
-            let started = false, firstX = 0, lastX = 0;
+            const { mx, brk } = aggregate(q => q.ele);
+            const g = ctx.createLinearGradient(0, p.t, 0, p.t + ih);
+            g.addColorStop(0, T.eleFill); g.addColorStop(1, 'rgba(14,124,123,0.02)');
+            ctx.fillStyle = g;
+            let run = [];
+            const flush = () => {
+                if (!run.length) return;
+                ctx.beginPath();
+                ctx.moveTo(run[0][0], run[0][1]);
+                for (let k = 1; k < run.length; k++) ctx.lineTo(run[k][0], run[k][1]);
+                ctx.lineTo(run[run.length - 1][0], p.t + ih); ctx.lineTo(run[0][0], p.t + ih); ctx.closePath();
+                ctx.fill();
+                run = [];
+            };
             for (let b = 0; b < buckets; b++) {
-                const i0 = Math.floor(b / buckets * pts.length), i1 = Math.max(i0 + 1, Math.floor((b + 1) / buckets * pts.length));
-                let v = null;
-                for (let i = i0; i < i1 && i < pts.length; i++) if (pts[i].ele != null) v = v == null ? pts[i].ele : Math.max(v, pts[i].ele);
-                if (v == null) continue;
-                const x = p.l + (b + 0.5) / buckets * iw, y = YE(v);
-                if (!started) { ctx.moveTo(x, y); firstX = x; started = true; } else ctx.lineTo(x, y);
-                lastX = x;
+                if (brk[b]) flush();
+                const v = mx[b]; if (v == null) continue;
+                run.push([p.l + (b + 0.5) / buckets * iw, YE(v)]);
             }
-            if (started) {
-                ctx.lineTo(lastX, p.t + ih); ctx.lineTo(firstX, p.t + ih); ctx.closePath();
-                const g = ctx.createLinearGradient(0, p.t, 0, p.t + ih);
-                g.addColorStop(0, T.eleFill); g.addColorStop(1, 'rgba(14,124,123,0.02)');
-                ctx.fillStyle = g; ctx.fill();
-                drawLine(YE, T.ele, 1.6, q => q.ele);
-            }
+            flush();
+            drawLine(YE, T.ele, 1.6, q => q.ele);
         }
         if (this.series.speed && hasSpd) drawLine(YS, T.speed, 1.3, q => q.speed);
         if (this.series.hr && hasHr) drawLine(YH, T.hr, 1.3, q => q.hr);

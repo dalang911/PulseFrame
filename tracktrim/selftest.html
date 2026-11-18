@@ -354,6 +354,70 @@
         ok(threw, '少于 2 条轨迹抛出错误');
     })();
 
+    grp('剖面图：曲线对齐坐标轴（合并空档 / 稀疏采样）');
+    (function () {
+        const T = TT.charts.theme();
+        const T0 = Date.UTC(2026, 10, 12, 1, 0, 0);
+        const mk2 = (n, t0, eleFn, lat0, name) => {
+            const pts = [];
+            for (let i = 0; i < n; i++) pts.push({ t: t0 + i * 1000, lat: lat0 + i * 0.0001, lon: 119.5 + i * 0.00012, ele: eleFn(i), hr: 130, cad: 88, power: 200, speed: null, dist: null, temp: null });
+            return { name, format: 'TEST', sport: 'running', points: pts, meta: { created: t0 } };
+        };
+        const rep = tr => M.repair(tr, M.defaultSettings(tr, M.detectIssues(tr))).points;
+        // 记录海拔线绘制路径；几何量全部在画布挂载时算好再移除（脱离 DOM 后 rect=0 会失真）
+        function measure(pts, xMode) {
+            const cv = document.createElement('canvas');
+            cv.style.width = '400px'; cv.style.height = '200px';
+            document.body.appendChild(cv);
+            const P = new TT.charts.Profile(cv, {});
+            P.setData(pts); P.setXMode(xMode); P.setSelection({ start: 0, end: pts.length - 1, cuts: [] });
+            const rec = { strokes: [], cur: null }; const rc = cv.getContext('2d');
+            cv.getContext = () => new Proxy(rc, {
+                get(t, p) {
+                    if (p === 'beginPath') return () => { rec.cur = []; };
+                    if (p === 'moveTo') return (x, y) => { if (rec.cur) rec.cur.push(['M', x, y]); };
+                    if (p === 'lineTo') return (x, y) => { if (rec.cur) rec.cur.push(['L', x, y]); };
+                    if (p === 'stroke') return () => { if (rec.cur && rec.cur.length) rec.strokes.push({ style: t.strokeStyle, width: t.lineWidth, pts: rec.cur }); rec.cur = null; };
+                    const v = t[p]; return typeof v === 'function' ? v.bind(t) : v;
+                },
+                set(t, p, v) { t[p] = v; return true; }
+            });
+            P.draw();
+            const line = rec.strokes.find(s => s.style === T.ele && Math.abs(s.width - 1.6) < 0.01);
+            const path = line ? line.pts : [];
+            const flat = path.map(q => [q[1], q[2]]);
+            const moves = path.filter(q => q[0] === 'M').length;
+            let pk = 0; for (let i = 1; i < pts.length; i++) if ((pts[i].ele == null ? -1e9 : pts[i].ele) > (pts[pk].ele == null ? -1e9 : pts[pk].ele)) pk = i;
+            let minY = flat.length ? flat[0] : [0, 0]; for (const q of flat) if (q[1] < minY[1]) minY = q;
+            let minX = Infinity, maxX = -Infinity; for (const q of flat) { if (q[0] < minX) minX = q[0]; if (q[0] > maxX) maxX = q[0]; }
+            const iw = 400 - P.pad.l - P.pad.r;
+            const res = { moves, peakIdx: pk, peakDrawnX: minY[0], trueX: P.px(P.xs[pk]), idxLinearX: P.pad.l + (pk / pts.length) * iw, minX, maxX, firstX: P.px(P.xs[0]), lastX: P.px(P.xs[pts.length - 1]) };
+            document.body.removeChild(cv);
+            return res;
+        }
+        // 合并 keep：A2(60点, ele 升到 128) + 1h 空档 + B2(60点, ele 升到 69)
+        const A2 = mk2(60, T0, i => 10 + i * 2, 35.4, 'A2');
+        const B2 = mk2(60, T0 + 3600000, i => 10 + i, 36.0, 'B2');
+        const mg = rep(TT.merge.join([A2, B2], { mode: 'keep' }));
+        const mt = measure(mg, 'time');
+        ok(mt.moves === 2, '合并空档·时间轴：曲线在空档处断开为 2 段（moves=' + mt.moves + '）');
+        near(mt.peakDrawnX, mt.trueX, 1.5, '合并空档·时间轴：最高海拔点画在时间轴位置');
+        ok(Math.abs(mt.peakDrawnX - mt.idxLinearX) > 50, '合并空档·时间轴：不再按点序号误画（偏离旧序号位 ' + Math.round(Math.abs(mt.peakDrawnX - mt.idxLinearX)) + 'px）');
+        const md = measure(mg, 'dist');
+        ok(md.moves === 1, '合并·距离轴：两段里程相邻无空档，曲线连续（moves=' + md.moves + '）');
+        near(md.minX, md.firstX, 1.5, '合并·距离轴：曲线起点对齐距离轴起点');
+        near(md.maxX, md.lastX, 1.5, '合并·距离轴：曲线终点对齐距离轴终点');
+        // 稀疏单文件（60点 < 像素列）：必须连续，不能画成孤立点
+        const spm = measure(rep(A2), 'time');
+        ok(spm.moves === 1, '稀疏单文件：曲线连续而非孤立点（moves=' + spm.moves + '）');
+        near(spm.peakDrawnX, spm.trueX, 1.5, '稀疏单文件：最高点画在时间轴位置');
+        // 稠密单文件（2000点 > 像素列）：连续、对齐，且与旧序号画法位置一致（观感不变）
+        const dnm = measure(rep(mk2(2000, T0, i => 10 + i * 0.02, 35.4, 'D')), 'time');
+        ok(dnm.moves === 1, '稠密单文件：曲线连续（moves=' + dnm.moves + '）');
+        near(dnm.peakDrawnX, dnm.trueX, 1.5, '稠密单文件：最高点画在时间轴位置');
+        near(dnm.peakDrawnX, dnm.idxLinearX, 2, '稠密均匀单文件：与旧序号画法位置一致（观感不变）');
+    })();
+
     const sum = document.getElementById('summary');
     sum.textContent = pass + ' 通过 / ' + fail + ' 失败';
     sum.className = fail ? 'fail' : 'pass';
